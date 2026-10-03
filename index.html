@@ -161,8 +161,9 @@
             <div class="card">
                 <div class="card-header">
                     AUTO PICKS (Underlying Engine × Options Engine)
-                    <span class="badge-fee">Est. Binance Fee Model Active (0.02% / 10% Cap)</span>
+                    <span style="display:flex;gap:10px;align-items:center;"><select id="horizon-quick" onchange="setHorizon(this.value)" style="width:auto;margin:0;padding:4px 8px;" title="Holding Horizon"></select><select id="gate-quick" onchange="setGate(this.value)" style="width:auto;margin:0;padding:4px 8px;" title="Gate Sensitivity"></select><span class="badge-fee">Est. Binance Fee Model Active (0.02% / 10% Cap)</span></span>
                 </div>
+                <div id="hz-info" style="font-size:11px;color:var(--text-muted);margin:-4px 0 10px;"></div>
                 <div class="table-container">
                     <table id="autopicks-table">
                         <thead><tr><th>Dir</th><th>Asset</th><th>Contract</th><th>Strike</th><th>Expiry</th><th>Entry (Ask)</th><th>Delta</th><th>Gamma</th><th>Theta /day</th><th>IV / IV-RV</th><th>Opt. Beta (Ω)</th><th>Spread</th><th>Score</th><th>T1 / T2</th><th>SL1 / SL2</th><th>R/R</th><th>Break-even</th><th>Actions</th></tr></thead>
@@ -307,6 +308,14 @@
                 <label>Maximum Allowed Spread (%)</label>
                 <input type="number" id="set-max-spread" value="15">
                 
+                <label>Holding Horizon</label>
+                <select id="set-horizon"></select>
+                <span class="fee-subtext" style="margin-bottom:12px;">Sets timeframes, allowed expiries, hold length, targets and stops. Applied on Save.</span>
+
+                <label>Gate Sensitivity</label>
+                <select id="set-gate"></select>
+                <span class="fee-subtext" style="margin-bottom:12px;">Strict: ADX ≥ 22, all 3 timeframes agree, ≥ 1.0 ATR to support/resistance. Normal: ADX ≥ 18, mid + slow agree, ≥ 0.5 ATR. Relaxed: ADX ≥ 14, slow timeframe agrees, ≥ 0.25 ATR.</span>
+
                 <label>Strategy Mode</label>
                 <select id="set-strategy">
                     <option value="conservative">Conservative (Near ATM, Delta ~0.6)</option>
@@ -393,9 +402,13 @@ function saveSettings() {
     AppState.settings.strategy = document.getElementById('set-strategy').value;
     AppState.settings.feeRatePercent = parseFloat(document.getElementById('set-fee-rate').value);
     AppState.settings.feeCapPercent = parseFloat(document.getElementById('set-fee-cap').value);
+    const hzNew = document.getElementById('set-horizon').value, hzChanged = hzNew !== AppState.settings.horizon;
+    AppState.settings.horizon = hzNew;
+    AppState.settings.gate = document.getElementById('set-gate').value;
+    document.getElementById('gate-quick').value = AppState.settings.gate;
     localStorage.setItem('appSettings', JSON.stringify(AppState.settings));
     alert('Settings Saved!');
-    evaluateSetups();
+    if (hzChanged) setHorizon(hzNew); else evaluateSetups();
 }
 
 function clearData() {
@@ -502,6 +515,42 @@ const TA = {
 /* =========================================================
    4b. EXTENDED TA: MACD, ADX, S/R, structure, realised vol, beta/alpha
 ========================================================= */
+const HZ = {
+    intraday: { label: 'Intraday (≤1 day)', tf: ['5m', '15m', '1h'], ideal: [8, 30], rv: { tf: '1h', n: 48, ppy: 8760, perDay: 24, baN: 72 },
+        cfg: { holdH: 4, minHours: 6, maxHours: 40, t1ATR: 1.25, t2ATR: 2.2, stopATR: 0.8, hardStopATR: 1.6, maxBurn: 6, minAtrPct: 0.12 } },
+    swing: { label: '1–3 days', tf: ['15m', '1h', '4h'], vwapN: 192, ideal: [30, 84], rv: { tf: '1h', n: 96, ppy: 8760, perDay: 24, baN: 168 },
+        cfg: { holdH: 36, minHours: 20, maxHours: 100, t1ATR: 1.2, t2ATR: 2.0, stopATR: 1.0, hardStopATR: 1.8, maxBurn: 15, minAtrPct: 0.3 } },
+    weekly: { label: 'Weekly (~5 days)', tf: ['1h', '4h', '1d'], vwapN: 120, ideal: [96, 200], rv: { tf: '1d', n: 30, ppy: 365, perDay: 1, baN: 60 },
+        cfg: { holdH: 120, minHours: 72, maxHours: 260, t1ATR: 1.0, t2ATR: 1.8, stopATR: 1.0, hardStopATR: 1.7, maxBurn: 25, minAtrPct: 0.8 } },
+    monthly: { label: 'Monthly (~20 days)', tf: ['4h', '1d', '1w'], vwapN: 120, ideal: [300, 700], rv: { tf: '1d', n: 60, ppy: 365, perDay: 1, baN: 90 },
+        cfg: { holdH: 480, minHours: 240, maxHours: 900, t1ATR: 1.0, t2ATR: 1.8, stopATR: 1.0, hardStopATR: 1.6, maxBurn: 30, minAtrPct: 2.0 } }
+};
+const GATE = {
+    strict: { label: 'Strict', minAdx: 22, minRoom: 1.0, agree: [0, 1, 2], desc: 'all 3 timeframes agree' },
+    normal: { label: 'Normal', minAdx: 18, minRoom: 0.5, agree: [1, 2], desc: 'mid + slow timeframes agree' },
+    relaxed: { label: 'Relaxed', minAdx: 14, minRoom: 0.25, agree: [2], desc: 'slow timeframe agrees' }
+};
+if (!GATE[AppState.settings.gate]) AppState.settings.gate = 'normal';
+const gateOpts = Object.entries(GATE).map(([k, g]) => `<option value="${k}">${g.label}</option>`).join('');
+['gate-quick', 'set-gate'].forEach(i => { const e = document.getElementById(i); e.innerHTML = gateOpts; e.value = AppState.settings.gate; });
+function setGate(v) {
+    AppState.settings.gate = v;
+    localStorage.setItem('appSettings', JSON.stringify(AppState.settings));
+    ['gate-quick', 'set-gate'].forEach(i => document.getElementById(i).value = v);
+    evaluateSetups();
+}
+const fmtH = h => h < 24 ? `${h}h` : `${+(h / 24).toFixed(1)}d`;
+if (!HZ[AppState.settings.horizon]) AppState.settings.horizon = 'intraday';
+const hzOpts = Object.entries(HZ).map(([k, h]) => `<option value="${k}">${h.label}</option>`).join('');
+['horizon-quick', 'set-horizon'].forEach(i => { const e = document.getElementById(i); e.innerHTML = hzOpts; e.value = AppState.settings.horizon; });
+async function setHorizon(v) {
+    AppState.settings.horizon = v;
+    localStorage.setItem('appSettings', JSON.stringify(AppState.settings));
+    ['horizon-quick', 'set-horizon'].forEach(i => document.getElementById(i).value = v);
+    AppState.ta = { BTC: {}, ETH: {} }; AppState.autopicks = []; AppState.gates = {};
+    const m = document.getElementById('no-picks-msg'); m.innerText = `Loading ${HZ[v].label} analysis…`; m.style.display = 'block';
+    await fetchSpotData(); evaluateSetups();
+}
 const sum = a => a.reduce((x, y) => x + y, 0);
 const clamp = (v, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
 Object.assign(TA, {
@@ -547,15 +596,15 @@ Object.assign(TA, {
         };
     },
     logRet: c => c.slice(1).map((v, i) => Math.log(v / c[i])),
-    rv: c => { // annualised realised vol from last 48 hourly returns
-        const x = TA.logRet(c).slice(-48), m = sum(x) / x.length;
-        return Math.sqrt(sum(x.map(v => (v - m) ** 2)) / (x.length - 1)) * Math.sqrt(24 * 365);
+    rv: (c, ppy = 8760, N = 48) => { // annualised realised vol from last N returns
+        const x = TA.logRet(c).slice(-N), m = sum(x) / x.length;
+        return Math.sqrt(sum(x.map(v => (v - m) ** 2)) / (x.length - 1)) * Math.sqrt(ppy);
     },
-    betaAlpha: (ra, rb) => { // beta and Jensen alpha (% per day) of A vs benchmark B, last 72 hourly returns
-        const n = Math.min(72, ra.length, rb.length), a = ra.slice(-n), b = rb.slice(-n), ma = sum(a) / n, mb = sum(b) / n;
+    betaAlpha: (ra, rb, N = 72, perDay = 24) => { // beta and Jensen alpha (% per day) of A vs benchmark B, last 72 hourly returns
+        const n = Math.min(N, ra.length, rb.length), a = ra.slice(-n), b = rb.slice(-n), ma = sum(a) / n, mb = sum(b) / n;
         let cv = 0, vb = 0; for (let i = 0; i < n; i++) { cv += (a[i] - ma) * (b[i] - mb); vb += (b[i] - mb) ** 2; }
         const beta = vb ? cv / vb : 1;
-        return { beta, alpha: (ma - beta * mb) * 24 * 100 };
+        return { beta, alpha: (ma - beta * mb) * perDay * 100 };
     }
 });
 
@@ -574,19 +623,22 @@ async function fetchSpotData() {
         updateSourceStatus('spot', 'LIVE');
     } catch (e) { updateSourceStatus('spot', 'ERROR'); }
 
+    const HK = AppState.settings.horizon, H = HZ[HK], need = [...new Set([...H.tf, H.rv.tf])];
     const kl = async (a, iv) => (await fetch(`https://api.binance.com/api/v3/klines?symbol=${a}USDT&interval=${iv}&limit=250`)).json();
     for (const asset of ['BTC', 'ETH']) {
         try {
-            const [m5, m15, h1] = await Promise.all([kl(asset, '5m'), kl(asset, '15m'), kl(asset, '1h')]);
-            AppState.market[asset].klines = m5;
-            const d = new Date(), day0 = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-            let dv = m5.filter(k => k[0] >= day0); if (dv.length < 6) dv = m5.slice(-48); // daily-anchored VWAP
-            const tf = { m5: TA.analyze(m5), m15: TA.analyze(m15), h1: TA.analyze(h1) }, hc = h1.map(k => +k[4]);
-            AppState.ta[asset] = { tf, price: tf.m5.price, vwap: TA.vwap(dv), rsi: tf.m15.rsi, atr: tf.m15.atr, rv: TA.rv(hc), ret: TA.logRet(hc) };
+            const K = Object.fromEntries(await Promise.all(need.map(async iv => [iv, await kl(asset, iv)])));
+            const [kf, km, ks] = H.tf.map(iv => K[iv]), rc = K[H.rv.tf].map(k => +k[4]);
+            AppState.market[asset].klines = kf;
+            let vk;
+            if (H.vwapN) vk = kf.slice(-H.vwapN);
+            else { const d = new Date(), day0 = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); vk = kf.filter(k => k[0] >= day0); if (vk.length < 6) vk = kf.slice(-48); } // daily-anchored VWAP
+            const tf = { f: TA.analyze(kf), m: TA.analyze(km), s: TA.analyze(ks) };
+            AppState.ta[asset] = { hz: HK, tf, price: tf.f.price, vwap: TA.vwap(vk), rsi: tf.m.rsi, atr: tf.s.atr, rv: TA.rv(rc, H.rv.ppy, H.rv.n), ret: TA.logRet(rc) };
         } catch (e) {}
     }
-    const B = AppState.ta.BTC, E = AppState.ta.ETH;
-    if (B && E && B.ret && E.ret) { B.ba = { ...TA.betaAlpha(B.ret, E.ret), vs: 'ETH' }; E.ba = { ...TA.betaAlpha(E.ret, B.ret), vs: 'BTC' }; }
+    const B = AppState.ta.BTC, E = AppState.ta.ETH, r = H.rv;
+    if (B && E && B.ret && E.ret && B.hz === HK && E.hz === HK) { B.ba = { ...TA.betaAlpha(B.ret, E.ret, r.baN, r.perDay), vs: 'ETH' }; E.ba = { ...TA.betaAlpha(E.ret, B.ret, r.baN, r.perDay), vs: 'BTC' }; }
 }
 
 /* =========================================================
@@ -698,44 +750,45 @@ function processIncomingOptions(data) {
 /* =========================================================
    7. AUTO-PICK ENGINE: underlying engine -> NO-TRADE gate -> options engine
 ========================================================= */
-const CFG = { holdH: 4, minHours: 6, t1ATR: 1.25, t2ATR: 2.2, stopATR: 0.8, hardStopATR: 1.6, minRR: 1.3, minEdge: 1.0, maxThetaPct: 35, maxIvRv: 2.5, minAdx: 18, minAtrPct: 0.12, topN: 3 };
+const CFG = { minRR: 1.3, minEdge: 1.0, maxIvRv: 2.5, minAdx: 18, topN: 3, ...HZ.intraday.cfg }; // horizon-specific fields are overwritten from HZ on every run
 const IVH = JSON.parse(localStorage.getItem('ivHist') || '{"BTC":[],"ETH":[]}');
 function recordIV(a, iv) {
-    const h = IVH[a], t = Date.now();
+    const h = (IVH[a + ':' + AppState.settings.horizon] ||= []), t = Date.now();
     if (!h.length || t - h[h.length - 1][0] > 60000) { h.push([t, iv]); if (h.length > 2000) h.shift(); localStorage.setItem('ivHist', JSON.stringify(IVH)); }
 }
 function ivRank(a, iv) { // rolling IV rank from ATM IV samples collected by this dashboard
-    const v = IVH[a].map(x => x[1]); if (v.length < 30) return null;
+    const v = (IVH[a + ':' + AppState.settings.horizon] || []).map(x => x[1]); if (v.length < 30) return null;
     const lo = Math.min(...v), hi = Math.max(...v); return hi > lo ? clamp((iv - lo) / (hi - lo), 0, 1) * 100 : 50;
 }
 
 function scoreUnderlying(asset) {
-    const ta = AppState.ta[asset], T = ta && ta.tf;
-    if (!T || !T.h1) return null;
-    const p = T.m5.price, a1 = T.h1.atr, a15 = T.m15.atr, c = [], m = T.m15.macd, r = T.m15.rsi, h = T.h1;
+    const ta = AppState.ta[asset], T = ta && ta.tf, hk = AppState.settings.horizon, H = HZ[hk];
+    if (!T || !T.s || ta.hz !== hk) return null;
+    const [L1, L2, L3] = H.tf, p = T.f.price, a1 = T.s.atr, a15 = T.m.atr, c = [], m = T.m.macd, r = T.m.rsi, h = T.s;
     const add = (label, w, v, note) => c.push({ label, w, v: clamp(v), note });
     const trend = t => (t.price > t.ema20 && t.ema20 > t.ema50) ? 1 : ((t.price < t.ema20 && t.ema20 < t.ema50) ? -1 : (t.price > t.ema50 ? 0.3 : -0.3));
     const up = Math.min(3, h.res ? (h.res - p) / a1 : 3), dn = Math.min(3, h.sup ? (p - h.sup) / a1 : 3);
-    add('5m trend (price/EMA20/EMA50)', 6, trend(T.m5));
-    add('15m trend (price/EMA20/EMA50)', 10, trend(T.m15));
-    add('1h trend (price/EMA20/EMA50)', 14, trend(h));
-    add('1h EMA50 vs EMA200', 8, (h.price > h.ema200 ? 0.5 : -0.5) + (h.ema50 > h.ema200 ? 0.5 : -0.5));
-    add('Market structure (1h HH/HL)', 12, h.structure);
-    add('Daily VWAP position', 8, (p - ta.vwap) / (2 * a15), `VWAP $${ta.vwap.toFixed(0)}`);
-    add('MACD histogram (15m)', 8, m.hist > 0 ? (m.hist > m.prev ? 1 : 0.5) : (m.hist < m.prev ? -1 : -0.5));
-    add('RSI (15m)', 6, r >= 75 ? -0.3 : (r >= 50 ? (r - 50) / 20 : (r <= 25 ? 0.3 : -(50 - r) / 20)), `RSI ${r.toFixed(0)}`);
-    add('Volume confirmation (15m)', 6, T.m15.dir * clamp((T.m15.volRatio - 0.8) / 0.8, 0, 1), `vol x${T.m15.volRatio.toFixed(2)}`);
+    add(`${L1} trend (price/EMA20/EMA50)`, 6, trend(T.f));
+    add(`${L2} trend (price/EMA20/EMA50)`, 10, trend(T.m));
+    add(`${L3} trend (price/EMA20/EMA50)`, 14, trend(h));
+    add(`${L3} EMA50 vs EMA200`, 8, (h.price > h.ema200 ? 0.5 : -0.5) + (h.ema50 > h.ema200 ? 0.5 : -0.5));
+    add(`Market structure (${L3} HH/HL)`, 12, h.structure);
+    add('VWAP position', 8, (p - ta.vwap) / (2 * a15), `VWAP $${ta.vwap.toFixed(0)}`);
+    add(`MACD histogram (${L2})`, 8, m.hist > 0 ? (m.hist > m.prev ? 1 : 0.5) : (m.hist < m.prev ? -1 : -0.5));
+    add(`RSI (${L2})`, 6, r >= 75 ? -0.3 : (r >= 50 ? (r - 50) / 20 : (r <= 25 ? 0.3 : -(50 - r) / 20)), `RSI ${r.toFixed(0)}`);
+    add(`Volume confirmation (${L2})`, 6, T.m.dir * clamp((T.m.volRatio - 0.8) / 0.8, 0, 1), `vol x${T.m.volRatio.toFixed(2)}`);
     add('S/R room (up vs down)', 6, (up - dn) / 2, `${up.toFixed(1)} ATR up / ${dn.toFixed(1)} ATR down`);
     add('Relative alpha', 4, ta.ba ? ta.ba.alpha / 2 : 0, ta.ba ? `alpha ${ta.ba.alpha.toFixed(2)}%/day, beta ${ta.ba.beta.toFixed(2)} vs ${ta.ba.vs}` : '');
-    const R = sum(c.map(x => x.w * x.v)) / sum(c.map(x => x.w)), adx = T.m15.adx, f = clamp((adx - 15) / 15, 0, 1);
+    const R = sum(c.map(x => x.w * x.v)) / sum(c.map(x => x.w)), adx = T.m.adx, f = clamp((adx - (CFG.minAdx - 3)) / 15, 0, 1);
     const bull = Math.round(50 + 50 * R * (0.5 + 0.5 * f)); // weak ADX compresses score toward 50
-    return { T, p, a1, c, bull, bear: 100 - bull, adx, atrPct: a1 / p * 100, up, dn, rv: ta.rv, ba: ta.ba, vwap: ta.vwap,
-             trend: { m5: trend(T.m5), m15: trend(T.m15), h1: trend(h) } };
+    return { T: { m5: T.f, m15: T.m, h1: T.s }, p, a1, c, bull, bear: 100 - bull, adx, atrPct: a1 / p * 100, up, dn, rv: ta.rv, ba: ta.ba, vwap: ta.vwap,
+             trend: { m5: trend(T.f), m15: trend(T.m), h1: trend(h) } };
 }
 
 function evaluateSetups() {
     AppState.autopicks = []; AppState.gates = {};
-    const now = Date.now(), st = AppState.settings;
+    const now = Date.now(), st = AppState.settings, H = HZ[st.horizon], G = GATE[st.gate] || GATE.normal; Object.assign(CFG, H.cfg, { minAdx: G.minAdx, minRoom: G.minRoom });
+    document.getElementById('hz-info').innerHTML = `<strong>${H.label}</strong> · ${H.tf.join(' / ')} candles · expiries ${fmtH(CFG.minHours)}–${fmtH(CFG.maxHours)} out · plan assumes ~${fmtH(CFG.holdH)} hold · targets &amp; stops in ${H.tf[2]} ATR · Gates: <strong>${G.label}</strong> (ADX ≥ ${G.minAdx} · ${G.desc} · room ≥ ${G.minRoom} ATR)`;
     const ar = v => v > 0.2 ? '<span class="up">▲</span>' : (v < -0.2 ? '<span class="down">▼</span>' : '◆');
 
     ['BTC', 'ETH'].forEach(asset => {
@@ -743,34 +796,37 @@ function evaluateSetups() {
         if (!u || !S) return;
         const isCall = u.bull >= u.bear, dir = isCall ? 'CALL' : 'PUT', sgn = isCall ? 1 : -1, tech = isCall ? u.bull : u.bear;
         const live = (AppState.options[asset] || []).filter(o => o.expiry > now);
-        const e0 = [...new Set(live.map(o => o.expiry))].sort((a, b) => a - b).find(e => (e - now) / 36e5 >= 20);
-        const atmL = live.filter(o => o.expiry === e0 && o.iv > 0 && Math.abs(o.delta) >= 0.4 && Math.abs(o.delta) <= 0.6).map(o => o.iv);
+        const inWin = live.filter(o => { const hr = (o.expiry - now) / 36e5; return hr >= CFG.minHours && hr <= CFG.maxHours; });
+        const e0 = [...new Set(inWin.map(o => o.expiry))].sort((a, b) => a - b)[0];
+        const atmL = inWin.filter(o => o.expiry === e0 && o.iv > 0 && Math.abs(o.delta) >= 0.4 && Math.abs(o.delta) <= 0.6).map(o => o.iv);
         const atmIV = atmL.length ? sum(atmL) / atmL.length : 0; if (atmIV) recordIV(asset, atmIV);
         const rank = atmIV ? ivRank(asset, atmIV) : null, room = isCall ? u.up : u.dn;
         const gate = [], miss = {}, cands = [], bump = k => { miss[k] = (miss[k] || 0) + 1; };
 
         // ---- Gate 1: underlying must justify a directional option trade ----
         if (!live.length) gate.push('waiting for options feed');
+        else if (!inWin.length) gate.push(`no ${H.label} expiry in chain (needs ${fmtH(CFG.minHours)}–${fmtH(CFG.maxHours)} to expiry)`);
         if (u.adx < CFG.minAdx) gate.push(`ADX ${u.adx.toFixed(0)} < ${CFG.minAdx} (choppy)`);
-        if (u.atrPct < CFG.minAtrPct) gate.push(`1h ATR ${u.atrPct.toFixed(2)}% too small to beat premium`);
+        if (u.atrPct < CFG.minAtrPct) gate.push(`${H.tf[2]} ATR ${u.atrPct.toFixed(2)}% too small to beat premium`);
         if (tech < st.minScore) gate.push(`${dir} score ${tech} < min ${st.minScore}`);
-        if (u.trend.m15 * sgn < 0 || u.trend.h1 * sgn < 0) gate.push('15m/1h trend disagrees');
-        if (room < 0.5) gate.push(`only ${room.toFixed(1)} ATR to ${isCall ? 'resistance' : 'support'}`);
+        const bad = G.agree.filter(i => [u.trend.m5, u.trend.m15, u.trend.h1][i] * sgn < 0);
+        if (bad.length) gate.push(`${bad.map(i => H.tf[i]).join('/')} trend disagrees`);
+        if (room < CFG.minRoom) gate.push(`only ${room.toFixed(2)} ATR to ${isCall ? 'resistance' : 'support'}`);
         let status = gate.join(' · ');
 
         // ---- Gate 2: options engine - rank contracts, enforce liquidity / IV / theta / edge ----
         if (!gate.length) {
             const target = st.strategy === 'conservative' ? 0.6 : (st.strategy === 'balanced' ? 0.4 : 0.2);
             const inv = isCall ? u.dn : u.up;
-            live.filter(o => o.side === dir).forEach(o => {
+            inWin.filter(o => o.side === dir).forEach(o => {
                 const hrs = (o.expiry - now) / 36e5, ad = Math.abs(o.delta);
                 if (hrs < CFG.minHours) return bump('expiry too near');
                 if (!(o.bid > 0 && o.ask > 0)) return bump('no two-sided quote');
                 if (o.spread > st.maxSpread) return bump('wide spread');
                 if (Math.abs(ad - target) > 0.15 || !(o.iv > 0 && o.mark > 0)) return; // outside delta band
-                const ivrv = u.rv ? o.iv / u.rv : 1, thPct = Math.abs(o.theta) / o.mark * 100;
+                const ivrv = u.rv ? o.iv / u.rv : 1, thPct = Math.abs(o.theta) / o.mark * 100, burn = thPct * CFG.holdH / 24;
                 if (ivrv > CFG.maxIvRv) return bump('IV too rich vs RV');
-                if (thPct > CFG.maxThetaPct) return bump('theta burn');
+                if (burn > CFG.maxBurn) return bump('theta burn');
                 // delta-gamma-theta projection of premium at underlying targets / stops
                 const dP = (dS, hh) => o.delta * dS + 0.5 * o.gamma * dS * dS + o.theta * hh / 24;
                 const dT1 = Math.min(CFG.t1ATR, room - 0.1) * u.a1, dT2 = CFG.t2ATR * u.a1;
@@ -787,16 +843,16 @@ function evaluateSetups() {
                     ['Delta fit', 18, 100 - Math.abs(ad - target) / 0.15 * 100],
                     ['Bid/ask spread', 14, 100 - o.spread * 6],
                     ['IV value (IV/RV' + (rank === null ? '' : ' + IV rank') + ')', 18, rank === null ? ivS : (ivS + 100 - rank) / 2],
-                    ['Theta burn', 14, (40 - thPct) / 32 * 100],
+                    ['Theta burn over hold', 14, (CFG.maxBurn - burn) / (0.8 * CFG.maxBurn) * 100],
                     ['Edge (expected move / break-even)', 18, (edge - 1) / 2 * 100],
-                    ['Expiry (DTE) fit', 10, hrs < 24 ? hrs / 24 * 100 : Math.max(40, 100 - Math.max(0, hrs - 96) / 2.4)],
+                    ['Expiry fit for horizon', 10, hrs < H.ideal[0] ? Math.max(30, hrs / H.ideal[0] * 100) : Math.max(40, 100 - Math.max(0, hrs - H.ideal[1]) / H.ideal[1] * 60)],
                     ['Top-of-book depth', 8, (o.bidQty || o.askQty) ? Math.log10(1 + Math.min(o.bidQty, o.askQty)) / 1.3 * 100 : 50]
                 ].map(([k, w, v]) => ({ k, w, s: clamp(v, 0, 100) }));
                 const cq = sum(parts.map(x => x.w * x.s)) / sum(parts.map(x => x.w)), final = 0.5 * tech + 0.5 * cq;
                 if (final < st.minScore) return bump('combined score < min');
                 cands.push({ asset, contract: o.symbol, side: dir, strike: o.strike, expiry: o.expiry, entry: o.ask, delta: o.delta, gamma: o.gamma,
                     theta: o.theta, vega: o.vega, iv: o.iv, spread: o.spread, score: Math.round(final), tech, cq: Math.round(cq), t1, t2, sl1, sl2,
-                    rr: rr.toFixed(2), ivrv, rank, omega: ad * S / o.mark, thPct, be, bePct: be / S * 100, edge, hrs, money: (o.strike / S - 1) * 100,
+                    rr: rr.toFixed(2), ivrv, rank, omega: ad * S / o.mark, thPct, burn, be, bePct: be / S * 100, edge, hrs, money: (o.strike / S - 1) * 100,
                     parts, taLog: u.c, opt: o });
             });
             cands.sort((a, b) => b.score - a.score);
@@ -816,7 +872,7 @@ function evaluateSetups() {
         document.getElementById(`${id}-rsi`).innerText = u.T.m15.rsi.toFixed(1);
         const lv = x => x ? '$' + x.toFixed(0) : '--', ba = u.ba;
         document.getElementById(`${id}-detail`).innerHTML = `
-            Trend 5m ${ar(u.trend.m5)} 15m ${ar(u.trend.m15)} 1h ${ar(u.trend.h1)} · ADX ${u.adx.toFixed(0)} · ATR(1h) ${u.atrPct.toFixed(2)}% · Vol x${u.T.m15.volRatio.toFixed(1)}<br>
+            Trend ${H.tf[0]} ${ar(u.trend.m5)} ${H.tf[1]} ${ar(u.trend.m15)} ${H.tf[2]} ${ar(u.trend.h1)} · ADX ${u.adx.toFixed(0)} · ATR(${H.tf[2]}) ${u.atrPct.toFixed(2)}% · Vol x${u.T.m15.volRatio.toFixed(1)}<br>
             Support ${lv(u.T.h1.sup)} · Resistance ${lv(u.T.h1.res)} · VWAP ${lv(u.vwap)}<br>
             RV ${(u.rv * 100).toFixed(0)}% · ATM IV ${atmIV ? (atmIV * 100).toFixed(0) + '%' : '--'} · IV rank ${rank === null ? 'building…' : rank.toFixed(0)}<br>
             ${ba ? `Beta ${ba.beta.toFixed(2)} · Alpha ${ba.alpha >= 0 ? '+' : ''}${ba.alpha.toFixed(2)}%/day vs ${ba.vs}<br>` : ''}
@@ -857,11 +913,11 @@ function renderAutoPicks() {
                 <a class="chart-link" href="${getBinanceOptionUrl(p.contract)}" target="_blank" title="Open Binance Option Chart">📈</a>
             </td>
             <td>$${p.strike}<span class="fee-subtext">${p.money >= 0 ? '+' : ''}${f(p.money, 1)}% · ${Math.abs(p.money) < 0.5 ? 'ATM' : ((isCall === p.money > 0) ? 'OTM' : 'ITM')}</span></td>
-            <td>${formatTime(p.expiry)}<span class="fee-subtext">${f(p.hrs, 0)}h left</span></td>
+            <td>${formatTime(p.expiry)}<span class="fee-subtext">${p.hrs >= 48 ? f(p.hrs / 24, 1) + 'd' : f(p.hrs, 0) + 'h'} left</span></td>
             <td>$${f(p.entry)}</td>
             <td>${f(p.delta)}</td>
             <td>${p.gamma.toFixed(5)}</td>
-            <td>${f(p.theta)}<span class="fee-subtext">${f(p.thPct, 1)}% of premium</span></td>
+            <td>${f(p.theta)}<span class="fee-subtext">${f(p.thPct, 1)}%/day · ${f(p.burn, 1)}% over hold</span></td>
             <td>${f(p.iv * 100, 1)}%<span class="fee-subtext">IV/RV ${f(p.ivrv)}${p.rank !== null ? ' · rank ' + f(p.rank, 0) : ''}</span></td>
             <td>${f(p.omega, 1)}x<span class="fee-subtext">Δ·S / premium</span></td>
             <td>${f(p.spread, 1)}%</td>
@@ -884,7 +940,7 @@ function showWhy(idx) {
     const h = t => `<div style="margin:12px 0 4px;"><strong>${t}</strong></div>`;
     const tb = rows => `<table style="width:100%;font-size:12px;">${rows}</table>`;
     document.getElementById('why-content').innerHTML = `
-        <div><strong>${p.contract}</strong> · Final <strong>${p.score}/100</strong> = 50% underlying (${p.tech}) + 50% option quality (${p.cq})</div>
+        <div><strong>${p.contract}</strong> · ${HZ[AppState.settings.horizon].label} · Final <strong>${p.score}/100</strong> = 50% underlying (${p.tech}) + 50% option quality (${p.cq})</div>
         ${h('1 · Underlying engine')}<span class="fee-subtext">Signal +1 supports the ${p.side}, -1 opposes it</span>
         ${tb(p.taLog.map(x => { const v = x.v * sg; return `<tr><td>${x.label}</td><td>w${x.w}</td><td class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '+' : ''}${f(v)}</td><td style="color:var(--text-muted)">${x.note || ''}</td></tr>`; }).join(''))}
         ${h('2 · Options engine')}
@@ -892,10 +948,10 @@ function showWhy(idx) {
         ${h('3 · Greeks & cost')}
         Delta ${f(o.delta)} · Gamma ${o.gamma.toFixed(5)} · Theta ${f(o.theta)}/day (${f(p.thPct, 1)}% of premium) · Vega ${f(o.vega)}<br>
         IV ${f(o.iv * 100, 1)}% · IV/RV ${f(p.ivrv)} · Option beta (Ω) ${f(p.omega, 1)}x · Spread ${f(o.spread, 1)}%<br>
-        Break-even underlying move ${f(p.bePct, 2)}% ($${f(p.be, 0)}) includes spread, est. entry+exit fees and ${CFG.holdH}h of theta.
+        Break-even underlying move ${f(p.bePct, 2)}% ($${f(p.be, 0)}) includes spread, est. entry+exit fees and ${fmtH(CFG.holdH)} of theta.
         ${h('4 · Trade plan')}
         Entry $${f(p.entry)} → T1 $${f(p.t1)} → T2 $${f(p.t2)} · SL1 $${f(p.sl1)} · SL2 $${f(p.sl2)} · R/R ${p.rr}:1<br>
-        <span class="fee-subtext">Premium targets use delta + gamma + theta over a ${CFG.holdH}h hold at ATR-based underlying moves, capped by nearest support/resistance. Vega/IV change is not modelled, so an IV drop can hurt more than shown.</span>`;
+        <span class="fee-subtext">Premium targets use delta + gamma + theta over a ${fmtH(CFG.holdH)} hold at ATR-based underlying moves, capped by nearest support/resistance. Vega/IV change is not modelled, and longer horizons stretch the delta-gamma approximation, so treat targets and stops as estimates.</span>`;
     document.querySelector('#why-modal .modal').style.width = '640px';
     document.getElementById('why-modal').style.display = 'flex';
 }
