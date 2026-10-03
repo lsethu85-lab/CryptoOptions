@@ -160,28 +160,12 @@
 
             <div class="card">
                 <div class="card-header">
-                    AUTO PICKS (Qualified Setups)
+                    AUTO PICKS (Underlying Engine × Options Engine)
                     <span class="badge-fee">Est. Binance Fee Model Active (0.02% / 10% Cap)</span>
                 </div>
                 <div class="table-container">
                     <table id="autopicks-table">
-                        <thead>
-                            <tr>
-                                <th>Dir</th>
-                                <th>Asset</th>
-                                <th>Contract</th>
-                                <th>Strike</th>
-                                <th>Expiry</th>
-                                <th>Entry</th>
-                                <th>Delta</th>
-                                <th>Spread</th>
-                                <th>Score</th>
-                                <th>Target 1</th>
-                                <th>Stop Loss</th>
-                                <th>R/R</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Dir</th><th>Asset</th><th>Contract</th><th>Strike</th><th>Expiry</th><th>Entry (Ask)</th><th>Delta</th><th>Gamma</th><th>Theta /day</th><th>IV / IV-RV</th><th>Opt. Beta (Ω)</th><th>Spread</th><th>Score</th><th>T1 / T2</th><th>SL1 / SL2</th><th>R/R</th><th>Break-even</th><th>Actions</th></tr></thead>
                         <tbody id="autopicks-body"></tbody>
                     </table>
                     <div id="no-picks-msg" style="padding: 20px; text-align: center; color: var(--text-muted);">Connecting to live options feed...</div>
@@ -516,40 +500,93 @@ const TA = {
 };
 
 /* =========================================================
-   5. SPOT MARKET DATA (BINANCE SPOT REST)
+   4b. EXTENDED TA: MACD, ADX, S/R, structure, realised vol, beta/alpha
+========================================================= */
+const sum = a => a.reduce((x, y) => x + y, 0);
+const clamp = (v, lo = -1, hi = 1) => Math.max(lo, Math.min(hi, v));
+Object.assign(TA, {
+    emaSeries: (d, p) => { const k = 2 / (p + 1); let e = d[0]; return d.map((v, i) => { e = i ? v * k + e * (1 - k) : v; return e; }); },
+    macd: c => {
+        const f = TA.emaSeries(c, 12), s = TA.emaSeries(c, 26), l = f.map((v, i) => v - s[i]), g = TA.emaSeries(l, 9), n = c.length - 1;
+        return { hist: l[n] - g[n], prev: l[n - 1] - g[n - 1] };
+    },
+    adx: (k, p = 14) => {
+        if (k.length < 2 * p + 2) return 20;
+        const tr = [], pd = [], nd = [];
+        for (let i = 1; i < k.length; i++) {
+            const H = +k[i][2], L = +k[i][3], pc = +k[i - 1][4], up = H - +k[i - 1][2], dn = +k[i - 1][3] - L;
+            tr.push(Math.max(H - L, Math.abs(H - pc), Math.abs(L - pc)));
+            pd.push(up > dn && up > 0 ? up : 0); nd.push(dn > up && dn > 0 ? dn : 0);
+        }
+        let t = sum(tr.slice(0, p)), a = sum(pd.slice(0, p)), b = sum(nd.slice(0, p)); const dx = [];
+        for (let i = p; i <= tr.length; i++) {
+            if (i > p) { t += tr[i - 1] - t / p; a += pd[i - 1] - a / p; b += nd[i - 1] - b / p; }
+            dx.push(100 * Math.abs(a - b) / Math.max(1e-9, a + b));
+        }
+        let x = sum(dx.slice(0, p)) / p;
+        for (let i = p; i < dx.length; i++) x = (x * (p - 1) + dx[i]) / p;
+        return x;
+    },
+    levels: (k, price) => { // nearest fractal swing high above / swing low below price
+        let res = null, sup = null;
+        for (let i = 2; i < k.length - 2; i++) {
+            const h = +k[i][2], l = +k[i][3], nb = [-2, -1, 1, 2].map(j => k[i + j]);
+            if (h > price && nb.every(x => h > +x[2]) && (res === null || h < res)) res = h;
+            if (l < price && nb.every(x => l < +x[3]) && (sup === null || l > sup)) sup = l;
+        }
+        return { res, sup };
+    },
+    analyze: k => {
+        const C = k.map(x => +x[4]), V = k.map(x => +x[5]), n = k.length, price = C[n - 1];
+        const w = k.slice(-48), h = Math.floor(w.length / 2), old = w.slice(0, h), rec = w.slice(h);
+        const hi = a => Math.max(...a.map(x => +x[2])), lo = a => Math.min(...a.map(x => +x[3])), base = sum(V.slice(-22, -2)) / 20;
+        return {
+            price, ema20: TA.ema(C, 20), ema50: TA.ema(C, 50), ema200: TA.ema(C, 200), rsi: TA.rsi(C, 14), macd: TA.macd(C),
+            atr: TA.atr(k, 14), adx: TA.adx(k, 14), volRatio: base > 0 ? V[n - 2] / base : 1, dir: Math.sign(C[n - 2] - +k[n - 2][1]),
+            structure: (hi(rec) > hi(old) ? 0.5 : -0.5) + (lo(rec) > lo(old) ? 0.5 : -0.5), ...TA.levels(k.slice(-120), price)
+        };
+    },
+    logRet: c => c.slice(1).map((v, i) => Math.log(v / c[i])),
+    rv: c => { // annualised realised vol from last 48 hourly returns
+        const x = TA.logRet(c).slice(-48), m = sum(x) / x.length;
+        return Math.sqrt(sum(x.map(v => (v - m) ** 2)) / (x.length - 1)) * Math.sqrt(24 * 365);
+    },
+    betaAlpha: (ra, rb) => { // beta and Jensen alpha (% per day) of A vs benchmark B, last 72 hourly returns
+        const n = Math.min(72, ra.length, rb.length), a = ra.slice(-n), b = rb.slice(-n), ma = sum(a) / n, mb = sum(b) / n;
+        let cv = 0, vb = 0; for (let i = 0; i < n; i++) { cv += (a[i] - ma) * (b[i] - mb); vb += (b[i] - mb) ** 2; }
+        const beta = vb ? cv / vb : 1;
+        return { beta, alpha: (ma - beta * mb) * 24 * 100 };
+    }
+});
+
+/* =========================================================
+   5. SPOT MARKET DATA (BINANCE SPOT REST) - 5m / 15m / 1h
 ========================================================= */
 async function fetchSpotData() {
     try {
         let spotRes = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT"]');
         let spotData = await spotRes.json();
-        
         spotData.forEach(s => {
-            let asset = s.symbol.replace('USDT','');
+            let asset = s.symbol.replace('USDT', '');
             AppState.market[asset].price = parseFloat(s.lastPrice);
             AppState.market[asset].change = parseFloat(s.priceChangePercent);
         });
         updateSourceStatus('spot', 'LIVE');
-    } catch (e) {
-        updateSourceStatus('spot', 'ERROR');
-    }
+    } catch (e) { updateSourceStatus('spot', 'ERROR'); }
 
-    for(let asset of ['BTC', 'ETH']) {
+    const kl = async (a, iv) => (await fetch(`https://api.binance.com/api/v3/klines?symbol=${a}USDT&interval=${iv}&limit=250`)).json();
+    for (const asset of ['BTC', 'ETH']) {
         try {
-            let klineRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${asset}USDT&interval=5m&limit=50`);
-            let klines = await klineRes.json();
-            AppState.market[asset].klines = klines;
-            let closes = klines.map(k => parseFloat(k[4]));
-            AppState.ta[asset] = {
-                price: closes[closes.length-1],
-                ema9: TA.ema(closes, 9),
-                ema20: TA.ema(closes, 20),
-                ema50: TA.ema(closes, 50),
-                rsi: TA.rsi(closes, 14),
-                atr: TA.atr(klines, 14),
-                vwap: TA.vwap(klines.slice(-20))
-            };
+            const [m5, m15, h1] = await Promise.all([kl(asset, '5m'), kl(asset, '15m'), kl(asset, '1h')]);
+            AppState.market[asset].klines = m5;
+            const d = new Date(), day0 = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+            let dv = m5.filter(k => k[0] >= day0); if (dv.length < 6) dv = m5.slice(-48); // daily-anchored VWAP
+            const tf = { m5: TA.analyze(m5), m15: TA.analyze(m15), h1: TA.analyze(h1) }, hc = h1.map(k => +k[4]);
+            AppState.ta[asset] = { tf, price: tf.m5.price, vwap: TA.vwap(dv), rsi: tf.m15.rsi, atr: tf.m15.atr, rv: TA.rv(hc), ret: TA.logRet(hc) };
         } catch (e) {}
     }
+    const B = AppState.ta.BTC, E = AppState.ta.ETH;
+    if (B && E && B.ret && E.ret) { B.ba = { ...TA.betaAlpha(B.ret, E.ret), vs: 'ETH' }; E.ba = { ...TA.betaAlpha(E.ret, B.ret), vs: 'BTC' }; }
 }
 
 /* =========================================================
@@ -626,7 +663,7 @@ function processIncomingOptions(data) {
         const delta = parseFloat(item.d) || 0;
         const gamma = parseFloat(item.g) || 0;
         const theta = parseFloat(item.t) || 0;
-        const vega = parseFloat(item.vega) || 0;
+        const vega = parseFloat(item.v ?? item.vega) || 0;
 
         let spread = 999;
         if (bid > 0 && ask > 0 && mark > 0) {
@@ -650,7 +687,7 @@ function processIncomingOptions(data) {
             theta,
             vega,
             spread: Math.max(0, spread),
-            volume: (parseFloat(item.aq) || 1) * 10
+            volume: (parseFloat(item.aq) || 1) * 10, bidQty: parseFloat(item.bq) || 0, askQty: parseFloat(item.aq) || 0
         };
     });
 
@@ -659,91 +696,131 @@ function processIncomingOptions(data) {
 }
 
 /* =========================================================
-   7. AUTO-PICK & SELECTION ENGINE
+   7. AUTO-PICK ENGINE: underlying engine -> NO-TRADE gate -> options engine
 ========================================================= */
+const CFG = { holdH: 4, minHours: 6, t1ATR: 1.25, t2ATR: 2.2, stopATR: 0.8, hardStopATR: 1.6, minRR: 1.3, minEdge: 1.0, maxThetaPct: 35, maxIvRv: 2.5, minAdx: 18, minAtrPct: 0.12, topN: 3 };
+const IVH = JSON.parse(localStorage.getItem('ivHist') || '{"BTC":[],"ETH":[]}');
+function recordIV(a, iv) {
+    const h = IVH[a], t = Date.now();
+    if (!h.length || t - h[h.length - 1][0] > 60000) { h.push([t, iv]); if (h.length > 2000) h.shift(); localStorage.setItem('ivHist', JSON.stringify(IVH)); }
+}
+function ivRank(a, iv) { // rolling IV rank from ATM IV samples collected by this dashboard
+    const v = IVH[a].map(x => x[1]); if (v.length < 30) return null;
+    const lo = Math.min(...v), hi = Math.max(...v); return hi > lo ? clamp((iv - lo) / (hi - lo), 0, 1) * 100 : 50;
+}
+
+function scoreUnderlying(asset) {
+    const ta = AppState.ta[asset], T = ta && ta.tf;
+    if (!T || !T.h1) return null;
+    const p = T.m5.price, a1 = T.h1.atr, a15 = T.m15.atr, c = [], m = T.m15.macd, r = T.m15.rsi, h = T.h1;
+    const add = (label, w, v, note) => c.push({ label, w, v: clamp(v), note });
+    const trend = t => (t.price > t.ema20 && t.ema20 > t.ema50) ? 1 : ((t.price < t.ema20 && t.ema20 < t.ema50) ? -1 : (t.price > t.ema50 ? 0.3 : -0.3));
+    const up = Math.min(3, h.res ? (h.res - p) / a1 : 3), dn = Math.min(3, h.sup ? (p - h.sup) / a1 : 3);
+    add('5m trend (price/EMA20/EMA50)', 6, trend(T.m5));
+    add('15m trend (price/EMA20/EMA50)', 10, trend(T.m15));
+    add('1h trend (price/EMA20/EMA50)', 14, trend(h));
+    add('1h EMA50 vs EMA200', 8, (h.price > h.ema200 ? 0.5 : -0.5) + (h.ema50 > h.ema200 ? 0.5 : -0.5));
+    add('Market structure (1h HH/HL)', 12, h.structure);
+    add('Daily VWAP position', 8, (p - ta.vwap) / (2 * a15), `VWAP $${ta.vwap.toFixed(0)}`);
+    add('MACD histogram (15m)', 8, m.hist > 0 ? (m.hist > m.prev ? 1 : 0.5) : (m.hist < m.prev ? -1 : -0.5));
+    add('RSI (15m)', 6, r >= 75 ? -0.3 : (r >= 50 ? (r - 50) / 20 : (r <= 25 ? 0.3 : -(50 - r) / 20)), `RSI ${r.toFixed(0)}`);
+    add('Volume confirmation (15m)', 6, T.m15.dir * clamp((T.m15.volRatio - 0.8) / 0.8, 0, 1), `vol x${T.m15.volRatio.toFixed(2)}`);
+    add('S/R room (up vs down)', 6, (up - dn) / 2, `${up.toFixed(1)} ATR up / ${dn.toFixed(1)} ATR down`);
+    add('Relative alpha', 4, ta.ba ? ta.ba.alpha / 2 : 0, ta.ba ? `alpha ${ta.ba.alpha.toFixed(2)}%/day, beta ${ta.ba.beta.toFixed(2)} vs ${ta.ba.vs}` : '');
+    const R = sum(c.map(x => x.w * x.v)) / sum(c.map(x => x.w)), adx = T.m15.adx, f = clamp((adx - 15) / 15, 0, 1);
+    const bull = Math.round(50 + 50 * R * (0.5 + 0.5 * f)); // weak ADX compresses score toward 50
+    return { T, p, a1, c, bull, bear: 100 - bull, adx, atrPct: a1 / p * 100, up, dn, rv: ta.rv, ba: ta.ba, vwap: ta.vwap,
+             trend: { m5: trend(T.m5), m15: trend(T.m15), h1: trend(h) } };
+}
+
 function evaluateSetups() {
-    AppState.autopicks = [];
-    
+    AppState.autopicks = []; AppState.gates = {};
+    const now = Date.now(), st = AppState.settings;
+    const ar = v => v > 0.2 ? '<span class="up">▲</span>' : (v < -0.2 ? '<span class="down">▼</span>' : '◆');
+
     ['BTC', 'ETH'].forEach(asset => {
-        let ta = AppState.ta[asset];
-        let options = AppState.options[asset];
-        let price = AppState.market[asset].price;
-        if(!ta || !options || options.length === 0 || !price) return;
+        const id = asset.toLowerCase(), u = scoreUnderlying(asset), S = AppState.market[asset].price;
+        if (!u || !S) return;
+        const isCall = u.bull >= u.bear, dir = isCall ? 'CALL' : 'PUT', sgn = isCall ? 1 : -1, tech = isCall ? u.bull : u.bear;
+        const live = (AppState.options[asset] || []).filter(o => o.expiry > now);
+        const e0 = [...new Set(live.map(o => o.expiry))].sort((a, b) => a - b).find(e => (e - now) / 36e5 >= 20);
+        const atmL = live.filter(o => o.expiry === e0 && o.iv > 0 && Math.abs(o.delta) >= 0.4 && Math.abs(o.delta) <= 0.6).map(o => o.iv);
+        const atmIV = atmL.length ? sum(atmL) / atmL.length : 0; if (atmIV) recordIV(asset, atmIV);
+        const rank = atmIV ? ivRank(asset, atmIV) : null, room = isCall ? u.up : u.dn;
+        const gate = [], miss = {}, cands = [], bump = k => { miss[k] = (miss[k] || 0) + 1; };
 
-        let score = 50;
-        let log = [];
-        
-        if(ta.ema9 > ta.ema20) { score += 12; log.push("Short-term momentum: EMA9 > EMA20 (+12)"); }
-        else { score -= 12; log.push("Short-term momentum: EMA9 < EMA20 (-12)"); }
-        
-        if(ta.price > ta.ema50) { score += 10; log.push("Structure: Price above EMA50 (+10)"); }
-        else { score -= 10; log.push("Structure: Price below EMA50 (-10)"); }
-        
-        if(ta.price > ta.vwap) { score += 10; log.push("Baseline: Price above VWAP (+10)"); }
-        else { score -= 10; log.push("Baseline: Price below VWAP (-10)"); }
-        
-        if(ta.rsi > 50 && ta.rsi < 70) { score += 10; log.push(`RSI constructive (${ta.rsi.toFixed(1)})`); }
-        else if(ta.rsi < 50 && ta.rsi > 30) { score -= 10; log.push(`RSI softening (${ta.rsi.toFixed(1)})`); }
-        
-        let callScore = Math.max(0, Math.min(100, score));
-        let putScore = Math.max(0, Math.min(100, 100 - score));
-        
-        document.getElementById(`${asset.toLowerCase()}-score`).innerText = `${Math.max(callScore, putScore)}/100`;
-        let trend = callScore > 60 ? 'BULLISH' : (putScore > 60 ? 'BEARISH' : 'NEUTRAL');
-        let elTrend = document.getElementById(`${asset.toLowerCase()}-trend`);
-        elTrend.innerText = trend;
-        elTrend.className = `badge ${trend==='BULLISH'?'badge-call':(trend==='BEARISH'?'badge-put':'')}`;
-        document.getElementById(`${asset.toLowerCase()}-price`).innerText = `$${price.toFixed(2)}`;
-        document.getElementById(`${asset.toLowerCase()}-change`).innerText = `${AppState.market[asset].change > 0 ? '+':''}${AppState.market[asset].change.toFixed(2)}%`;
-        document.getElementById(`${asset.toLowerCase()}-change`).className = AppState.market[asset].change > 0 ? 'up' : 'down';
-        document.getElementById(`${asset.toLowerCase()}-rsi`).innerText = ta.rsi ? ta.rsi.toFixed(1) : '--';
+        // ---- Gate 1: underlying must justify a directional option trade ----
+        if (!live.length) gate.push('waiting for options feed');
+        if (u.adx < CFG.minAdx) gate.push(`ADX ${u.adx.toFixed(0)} < ${CFG.minAdx} (choppy)`);
+        if (u.atrPct < CFG.minAtrPct) gate.push(`1h ATR ${u.atrPct.toFixed(2)}% too small to beat premium`);
+        if (tech < st.minScore) gate.push(`${dir} score ${tech} < min ${st.minScore}`);
+        if (u.trend.m15 * sgn < 0 || u.trend.h1 * sgn < 0) gate.push('15m/1h trend disagrees');
+        if (room < 0.5) gate.push(`only ${room.toFixed(1)} ATR to ${isCall ? 'resistance' : 'support'}`);
+        let status = gate.join(' · ');
 
-        let validOptions = options.filter(o => o.spread <= AppState.settings.maxSpread && o.ask > 0);
-        
-        const rankContract = (opt, isCall, techScore) => {
-            let cScore = techScore * 0.5;
-            let spreadScore = Math.max(0, 100 - (opt.spread * 5));
-            cScore += spreadScore * 0.2;
-            
-            let targetDelta = AppState.settings.strategy === 'conservative' ? 0.6 : (AppState.settings.strategy === 'balanced' ? 0.4 : 0.2);
-            let absDelta = Math.abs(opt.delta);
-            let deltaMatch = 100 - (Math.abs(absDelta - targetDelta) * 100);
-            cScore += Math.max(0, deltaMatch) * 0.3;
+        // ---- Gate 2: options engine - rank contracts, enforce liquidity / IV / theta / edge ----
+        if (!gate.length) {
+            const target = st.strategy === 'conservative' ? 0.6 : (st.strategy === 'balanced' ? 0.4 : 0.2);
+            const inv = isCall ? u.dn : u.up;
+            live.filter(o => o.side === dir).forEach(o => {
+                const hrs = (o.expiry - now) / 36e5, ad = Math.abs(o.delta);
+                if (hrs < CFG.minHours) return bump('expiry too near');
+                if (!(o.bid > 0 && o.ask > 0)) return bump('no two-sided quote');
+                if (o.spread > st.maxSpread) return bump('wide spread');
+                if (Math.abs(ad - target) > 0.15 || !(o.iv > 0 && o.mark > 0)) return; // outside delta band
+                const ivrv = u.rv ? o.iv / u.rv : 1, thPct = Math.abs(o.theta) / o.mark * 100;
+                if (ivrv > CFG.maxIvRv) return bump('IV too rich vs RV');
+                if (thPct > CFG.maxThetaPct) return bump('theta burn');
+                // delta-gamma-theta projection of premium at underlying targets / stops
+                const dP = (dS, hh) => o.delta * dS + 0.5 * o.gamma * dS * dS + o.theta * hh / 24;
+                const dT1 = Math.min(CFG.t1ATR, room - 0.1) * u.a1, dT2 = CFG.t2ATR * u.a1;
+                const s1 = (inv < 1.2 ? clamp(inv + 0.1, 0.5, 1.2) : CFG.stopATR) * u.a1, s2 = CFG.hardStopATR * u.a1;
+                const t1 = o.ask + dP(sgn * dT1, CFG.holdH), t2 = o.ask + dP(sgn * dT2, CFG.holdH);
+                const sl1 = Math.max(0.01, o.ask + dP(-sgn * s1, CFG.holdH / 2)), sl2 = Math.max(0.01, Math.min(sl1, o.ask + dP(-sgn * s2, CFG.holdH / 2)));
+                const rr = (t1 - o.ask) / Math.max(0.01, o.ask - sl1);
+                const cost = (o.ask - o.bid) + calculateSingleLegFee(S, o.ask, 1) + calculateSingleLegFee(S, o.mark, 1) + Math.abs(o.theta) * CFG.holdH / 24;
+                const be = cost / Math.max(0.01, ad), edge = (CFG.t1ATR * u.a1) / be; // expected move vs break-even move
+                if (edge < CFG.minEdge) return bump('break-even > expected move');
+                if (rr < CFG.minRR) return bump('R/R too low');
+                const ivS = clamp(100 - (ivrv - 0.9) * 100, 0, 100);
+                const parts = [
+                    ['Delta fit', 18, 100 - Math.abs(ad - target) / 0.15 * 100],
+                    ['Bid/ask spread', 14, 100 - o.spread * 6],
+                    ['IV value (IV/RV' + (rank === null ? '' : ' + IV rank') + ')', 18, rank === null ? ivS : (ivS + 100 - rank) / 2],
+                    ['Theta burn', 14, (40 - thPct) / 32 * 100],
+                    ['Edge (expected move / break-even)', 18, (edge - 1) / 2 * 100],
+                    ['Expiry (DTE) fit', 10, hrs < 24 ? hrs / 24 * 100 : Math.max(40, 100 - Math.max(0, hrs - 96) / 2.4)],
+                    ['Top-of-book depth', 8, (o.bidQty || o.askQty) ? Math.log10(1 + Math.min(o.bidQty, o.askQty)) / 1.3 * 100 : 50]
+                ].map(([k, w, v]) => ({ k, w, s: clamp(v, 0, 100) }));
+                const cq = sum(parts.map(x => x.w * x.s)) / sum(parts.map(x => x.w)), final = 0.5 * tech + 0.5 * cq;
+                if (final < st.minScore) return bump('combined score < min');
+                cands.push({ asset, contract: o.symbol, side: dir, strike: o.strike, expiry: o.expiry, entry: o.ask, delta: o.delta, gamma: o.gamma,
+                    theta: o.theta, vega: o.vega, iv: o.iv, spread: o.spread, score: Math.round(final), tech, cq: Math.round(cq), t1, t2, sl1, sl2,
+                    rr: rr.toFixed(2), ivrv, rank, omega: ad * S / o.mark, thPct, be, bePct: be / S * 100, edge, hrs, money: (o.strike / S - 1) * 100,
+                    parts, taLog: u.c, opt: o });
+            });
+            cands.sort((a, b) => b.score - a.score);
+            AppState.autopicks.push(...cands.slice(0, CFG.topN));
+            if (!cands.length) status = `${dir} bias ${tech}/100 but no contract passed: ` + (Object.entries(miss).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${k} (${n})`).join(', ') || 'none inside delta band');
+        }
+        if (status) AppState.gates[asset] = status;
 
-            return cScore;
-        };
-
-        let bestCall = null, bestPut = null;
-        let maxCallScore = 0, maxPutScore = 0;
-
-        validOptions.forEach(opt => {
-            if(opt.side === 'CALL' && callScore >= AppState.settings.minScore) {
-                let s = rankContract(opt, true, callScore);
-                if(s > maxCallScore) { maxCallScore = s; bestCall = opt; }
-            }
-            if(opt.side === 'PUT' && putScore >= AppState.settings.minScore) {
-                let s = rankContract(opt, false, putScore);
-                if(s > maxPutScore) { maxPutScore = s; bestPut = opt; }
-            }
-        });
-
-        const createSignal = (opt, finalScore, taLog) => {
-            let expectedMove = Math.max(1, Math.abs(opt.delta) * (ta.atr || 20));
-            let entry = opt.ask;
-            let sl1 = Math.max(0.01, entry - (expectedMove * 1.0));
-            let t1 = entry + (expectedMove * 1.5);
-            let rr = (t1 - entry) / Math.max(0.01, (entry - sl1));
-
-            return {
-                asset, contract: opt.symbol, side: opt.side, strike: opt.strike, 
-                expiry: opt.expiry, entry, delta: opt.delta, spread: opt.spread, 
-                score: Math.round(finalScore), t1, sl1, rr: rr.toFixed(2), 
-                taLog, opt
-            };
-        };
-
-        if(bestCall) AppState.autopicks.push(createSignal(bestCall, maxCallScore, log));
-        if(bestPut) AppState.autopicks.push(createSignal(bestPut, maxPutScore, log));
+        // ---- dashboard card ----
+        const chg = AppState.market[asset].change, trendTxt = tech >= st.minScore ? (isCall ? 'BULLISH' : 'BEARISH') : 'NEUTRAL';
+        document.getElementById(`${id}-score`).innerText = `${Math.max(u.bull, u.bear)}/100`;
+        const el = document.getElementById(`${id}-trend`); el.innerText = trendTxt;
+        el.className = `badge ${trendTxt === 'BULLISH' ? 'badge-call' : (trendTxt === 'BEARISH' ? 'badge-put' : '')}`;
+        document.getElementById(`${id}-price`).innerText = `$${S.toFixed(2)}`;
+        document.getElementById(`${id}-change`).innerText = `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%`;
+        document.getElementById(`${id}-change`).className = chg > 0 ? 'up' : 'down';
+        document.getElementById(`${id}-rsi`).innerText = u.T.m15.rsi.toFixed(1);
+        const lv = x => x ? '$' + x.toFixed(0) : '--', ba = u.ba;
+        document.getElementById(`${id}-detail`).innerHTML = `
+            Trend 5m ${ar(u.trend.m5)} 15m ${ar(u.trend.m15)} 1h ${ar(u.trend.h1)} · ADX ${u.adx.toFixed(0)} · ATR(1h) ${u.atrPct.toFixed(2)}% · Vol x${u.T.m15.volRatio.toFixed(1)}<br>
+            Support ${lv(u.T.h1.sup)} · Resistance ${lv(u.T.h1.res)} · VWAP ${lv(u.vwap)}<br>
+            RV ${(u.rv * 100).toFixed(0)}% · ATM IV ${atmIV ? (atmIV * 100).toFixed(0) + '%' : '--'} · IV rank ${rank === null ? 'building…' : rank.toFixed(0)}<br>
+            ${ba ? `Beta ${ba.beta.toFixed(2)} · Alpha ${ba.alpha >= 0 ? '+' : ''}${ba.alpha.toFixed(2)}%/day vs ${ba.vs}<br>` : ''}
+            ${status ? `<span class="down"><strong>NO TRADE</strong></span> — ${status}` : `<span class="up"><strong>${dir} qualified</strong></span> — top ${cands.slice(0, CFG.topN).length} strikes ranked below`}`;
     });
 
     renderAutoPicks();
@@ -760,19 +837,18 @@ function formatTime(ms) {
 }
 
 function renderAutoPicks() {
-    let tbody = document.getElementById('autopicks-body');
+    let tbody = document.getElementById('autopicks-body'), msg = document.getElementById('no-picks-msg');
     tbody.innerHTML = '';
-    
-    if(AppState.autopicks.length === 0) {
-        document.getElementById('no-picks-msg').innerText = 'NO QUALIFIED SETUP (Criteria not met)';
-        document.getElementById('no-picks-msg').style.display = 'block';
+    if (AppState.autopicks.length === 0) {
+        const g = Object.entries(AppState.gates || {}).map(([a, t]) => `${a}: ${t}`).join('   |   ');
+        msg.innerText = g ? `NO TRADE — ${g}` : 'Connecting to live options feed...';
+        msg.style.display = 'block';
         return;
     }
-    document.getElementById('no-picks-msg').style.display = 'none';
-
+    msg.style.display = 'none';
+    const f = (v, d = 2) => v.toFixed(d);
     AppState.autopicks.forEach((p, idx) => {
-        let tr = document.createElement('tr');
-        let isCall = p.side === 'CALL';
+        let tr = document.createElement('tr'), isCall = p.side === 'CALL';
         tr.innerHTML = `
             <td><span class="badge ${isCall ? 'badge-call' : 'badge-put'}">${p.side}</span></td>
             <td><strong>${p.asset}</strong></td>
@@ -780,15 +856,20 @@ function renderAutoPicks() {
                 <a href="#" onclick="showWhy(${idx}); return false;" style="color:var(--yellow); text-decoration:underline;">${p.contract}</a>
                 <a class="chart-link" href="${getBinanceOptionUrl(p.contract)}" target="_blank" title="Open Binance Option Chart">📈</a>
             </td>
-            <td>$${p.strike}</td>
-            <td>${formatTime(p.expiry)}</td>
-            <td>$${p.entry.toFixed(2)}</td>
-            <td>${p.delta.toFixed(2)}</td>
-            <td>${p.spread.toFixed(1)}%</td>
-            <td style="font-weight:bold;">${p.score}/100</td>
-            <td class="up">$${p.t1.toFixed(2)}</td>
-            <td class="down">$${p.sl1.toFixed(2)}</td>
-            <td>${p.rr}</td>
+            <td>$${p.strike}<span class="fee-subtext">${p.money >= 0 ? '+' : ''}${f(p.money, 1)}% · ${Math.abs(p.money) < 0.5 ? 'ATM' : ((isCall === p.money > 0) ? 'OTM' : 'ITM')}</span></td>
+            <td>${formatTime(p.expiry)}<span class="fee-subtext">${f(p.hrs, 0)}h left</span></td>
+            <td>$${f(p.entry)}</td>
+            <td>${f(p.delta)}</td>
+            <td>${p.gamma.toFixed(5)}</td>
+            <td>${f(p.theta)}<span class="fee-subtext">${f(p.thPct, 1)}% of premium</span></td>
+            <td>${f(p.iv * 100, 1)}%<span class="fee-subtext">IV/RV ${f(p.ivrv)}${p.rank !== null ? ' · rank ' + f(p.rank, 0) : ''}</span></td>
+            <td>${f(p.omega, 1)}x<span class="fee-subtext">Δ·S / premium</span></td>
+            <td>${f(p.spread, 1)}%</td>
+            <td style="font-weight:bold;">${p.score}/100<span class="fee-subtext">TA ${p.tech} · Opt ${p.cq}</span></td>
+            <td class="up">$${f(p.t1)}<span class="fee-subtext">T2 $${f(p.t2)}</span></td>
+            <td class="down">$${f(p.sl1)}<span class="fee-subtext">SL2 $${f(p.sl2)}</span></td>
+            <td>${p.rr}<span class="fee-subtext">edge ${f(p.edge, 1)}x</span></td>
+            <td>${f(p.bePct, 2)}%<span class="fee-subtext">$${f(p.be, 0)} move</span></td>
             <td>
                 <button class="primary" onclick="addPaperTrade(${idx})">Paper Trade</button>
                 <button onclick="openBinanceOptionChart('${p.contract}')" title="Open Binance Option Chart">📈</button>
@@ -799,20 +880,23 @@ function renderAutoPicks() {
 }
 
 function showWhy(idx) {
-    let p = AppState.autopicks[idx];
-    let html = `
-        <div style="margin-bottom:12px;"><strong>Contract:</strong> ${p.contract}</div>
-        <div style="margin-bottom:12px;"><strong>Technical Alignment:</strong><br>
-        ${p.taLog.map(l => `• ${l}`).join('<br>')}
-        </div>
-        <div style="margin-bottom:12px;"><strong>Contract Metrics:</strong><br>
-        • Delta: ${p.opt.delta}<br>
-        • Bid/Ask Spread: ${p.opt.spread.toFixed(2)}%<br>
-        • Implied Volatility: ${(p.opt.iv * 100).toFixed(1)}%
-        </div>
-        <div><strong>Risk/Reward Ratio:</strong> ${p.rr}:1 based on technical ATR volatility.</div>
-    `;
-    document.getElementById('why-content').innerHTML = html;
+    const p = AppState.autopicks[idx], o = p.opt, sg = p.side === 'CALL' ? 1 : -1, f = (v, d = 2) => v.toFixed(d);
+    const h = t => `<div style="margin:12px 0 4px;"><strong>${t}</strong></div>`;
+    const tb = rows => `<table style="width:100%;font-size:12px;">${rows}</table>`;
+    document.getElementById('why-content').innerHTML = `
+        <div><strong>${p.contract}</strong> · Final <strong>${p.score}/100</strong> = 50% underlying (${p.tech}) + 50% option quality (${p.cq})</div>
+        ${h('1 · Underlying engine')}<span class="fee-subtext">Signal +1 supports the ${p.side}, -1 opposes it</span>
+        ${tb(p.taLog.map(x => { const v = x.v * sg; return `<tr><td>${x.label}</td><td>w${x.w}</td><td class="${v >= 0 ? 'up' : 'down'}">${v >= 0 ? '+' : ''}${f(v)}</td><td style="color:var(--text-muted)">${x.note || ''}</td></tr>`; }).join(''))}
+        ${h('2 · Options engine')}
+        ${tb(p.parts.map(x => `<tr><td>${x.k}</td><td>w${x.w}</td><td>${f(x.s, 0)}/100</td></tr>`).join(''))}
+        ${h('3 · Greeks & cost')}
+        Delta ${f(o.delta)} · Gamma ${o.gamma.toFixed(5)} · Theta ${f(o.theta)}/day (${f(p.thPct, 1)}% of premium) · Vega ${f(o.vega)}<br>
+        IV ${f(o.iv * 100, 1)}% · IV/RV ${f(p.ivrv)} · Option beta (Ω) ${f(p.omega, 1)}x · Spread ${f(o.spread, 1)}%<br>
+        Break-even underlying move ${f(p.bePct, 2)}% ($${f(p.be, 0)}) includes spread, est. entry+exit fees and ${CFG.holdH}h of theta.
+        ${h('4 · Trade plan')}
+        Entry $${f(p.entry)} → T1 $${f(p.t1)} → T2 $${f(p.t2)} · SL1 $${f(p.sl1)} · SL2 $${f(p.sl2)} · R/R ${p.rr}:1<br>
+        <span class="fee-subtext">Premium targets use delta + gamma + theta over a ${CFG.holdH}h hold at ATR-based underlying moves, capped by nearest support/resistance. Vega/IV change is not modelled, so an IV drop can hurt more than shown.</span>`;
+    document.querySelector('#why-modal .modal').style.width = '640px';
     document.getElementById('why-modal').style.display = 'flex';
 }
 
@@ -883,7 +967,7 @@ function addPaperTrade(autopickIdx) {
         side: p.side,
         entry: p.entry,
         qty: 1, // Default 1
-        t1: p.t1,
+        t1: p.t1, t2: p.t2, sl2: p.sl2,
         sl1: p.sl1,
         underlyingAtEntry: currentSpot,
         time: Date.now()
@@ -1117,6 +1201,8 @@ async function initApp() {
     setInterval(fetchSpotData, 15000);
 }
 
+['btc', 'eth'].forEach(id => document.getElementById(`${id}-score`).closest('.card').insertAdjacentHTML('beforeend',
+    `<div id="${id}-detail" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;line-height:1.7;color:var(--text-muted);">Loading multi-timeframe analysis…</div>`));
 initApp();
 </script>
 </body>
