@@ -62,7 +62,7 @@
         input, select { background: var(--bg-base); color: var(--text-main); border: 1px solid var(--border); padding: 8px; border-radius: 4px; width: 100%; margin-bottom: 10px; }
         
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
-        .modal { background: var(--bg-panel); padding: 20px; border-radius: 6px; border: 1px solid var(--border); width: 420px; max-width: 90%; max-height: 90vh; overflow-y: auto;}
+        .modal { background: var(--bg-panel); padding: 20px; border-radius: 6px; border: 1px solid var(--border); width: 440px; max-width: 90%; max-height: 90vh; overflow-y: auto;}
         .modal-header { font-size: 18px; font-weight: 600; margin-bottom: 15px; display: flex; justify-content: space-between;}
         .close-btn { cursor: pointer; font-size: 20px; color: var(--text-muted); }
         .disclaimer { font-size: 11px; color: var(--text-muted); margin-top: 20px; text-align: center; }
@@ -78,10 +78,9 @@
     </header>
 
     <div class="ds-monitor">
-        <div><span id="ds-opt-dot" class="status-dot standby">🟡</span>BINANCE OPTIONS: <span id="ds-opt-text" class="standby">CONNECTING</span></div>
+        <div><span id="ds-opt-dot" class="status-dot standby">🟡</span>BINANCE OPTIONS WEBSOCKET: <span id="ds-opt-text" class="standby">CONNECTING</span></div>
         <div><span id="ds-spot-dot" class="status-dot standby">🟡</span>BINANCE SPOT: <span id="ds-spot-text" class="standby">CONNECTING</span></div>
-        <div><span id="ds-cg-dot" class="status-dot standby">🟡</span>BACKUP FEED: <span id="ds-cg-text" class="standby">STANDBY</span></div>
-        <div style="margin-left:auto;"><span id="app-status" class="standby">Initializing Feed...</span></div>
+        <div style="margin-left:auto;"><span id="app-status" class="standby">Connecting WebSocket...</span></div>
     </div>
 
     <div class="container">
@@ -146,7 +145,7 @@
                         </thead>
                         <tbody id="autopicks-body"></tbody>
                     </table>
-                    <div id="no-picks-msg" style="padding: 20px; text-align: center; color: var(--text-muted);">Scanning available options...</div>
+                    <div id="no-picks-msg" style="padding: 20px; text-align: center; color: var(--text-muted);">Connecting to live options feed...</div>
                 </div>
             </div>
         </div>
@@ -209,10 +208,10 @@
             <div class="card" style="max-width: 600px;">
                 <div class="card-header">Risk & Selection Settings</div>
                 <label>Minimum Setup Score (0-100)</label>
-                <input type="number" id="set-min-score" value="70">
+                <input type="number" id="set-min-score" value="65">
                 
                 <label>Maximum Allowed Spread (%)</label>
-                <input type="number" id="set-max-spread" value="8">
+                <input type="number" id="set-max-spread" value="15">
                 
                 <label>Strategy Mode</label>
                 <select id="set-strategy">
@@ -244,35 +243,10 @@
 
 <script>
 /* =========================================================
-   1. AUTOMATIC CORS BYPASS (NO SERVER OR SETUP REQUIRED)
-========================================================= */
-async function safeFetch(url) {
-    // Attempt 1: Direct fetch
-    try {
-        let res = await fetch(url);
-        if (res.ok) return await res.json();
-    } catch (e) {}
-
-    // Attempt 2: CORS Proxy 1
-    try {
-        let res = await fetch('https://corsproxy.io/?url=' + encodeURIComponent(url));
-        if (res.ok) return await res.json();
-    } catch (e) {}
-
-    // Attempt 3: Public Fallback Proxy 2
-    try {
-        let res = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
-        if (res.ok) return await res.json();
-    } catch (e) {}
-
-    throw new Error('All connection bridges failed for ' + url);
-}
-
-/* =========================================================
-   2. STATE & STORAGE MANAGEMENT
+   1. STATE & STORAGE MANAGEMENT
 ========================================================= */
 const AppState = {
-    settings: JSON.parse(localStorage.getItem('appSettings')) || { minScore: 70, maxSpread: 8, strategy: 'balanced' },
+    settings: JSON.parse(localStorage.getItem('appSettings')) || { minScore: 65, maxSpread: 15, strategy: 'balanced' },
     paperTrades: JSON.parse(localStorage.getItem('paperTrades')) || [],
     tradeHistory: JSON.parse(localStorage.getItem('tradeHistory')) || [],
     market: { BTC: { price: 0, change: 0, klines: [] }, ETH: { price: 0, change: 0, klines: [] } },
@@ -280,6 +254,9 @@ const AppState = {
     ta: { BTC: {}, ETH: {} },
     autopicks: []
 };
+
+// Map to hold live streaming options contracts
+const liveOptionStore = {};
 
 document.getElementById('set-min-score').value = AppState.settings.minScore;
 document.getElementById('set-max-spread').value = AppState.settings.maxSpread;
@@ -291,7 +268,7 @@ function saveSettings() {
     AppState.settings.strategy = document.getElementById('set-strategy').value;
     localStorage.setItem('appSettings', JSON.stringify(AppState.settings));
     alert('Settings Saved!');
-    appLoop();
+    evaluateSetups();
 }
 
 function clearData() {
@@ -318,7 +295,7 @@ function updateSourceStatus(source, status) {
 }
 
 /* =========================================================
-   3. TECHNICAL ANALYSIS CALCULATIONS
+   2. TECHNICAL ANALYSIS (UNDERLYING ASSETS)
 ========================================================= */
 const TA = {
     ema: (data, period) => {
@@ -342,7 +319,7 @@ const TA = {
         return 100 - (100 / (1 + rs));
     },
     atr: (klines, period = 14) => {
-        if(klines.length <= period) return 0;
+        if(klines.length <= period) return 20;
         let trs = [];
         for(let i = 1; i < klines.length; i++) {
             let high = parseFloat(klines[i][2]);
@@ -365,37 +342,27 @@ const TA = {
 };
 
 /* =========================================================
-   4. DATA FETCHING (AUTOMATIC PUBLIC ROUTING)
+   3. SPOT MARKET DATA (DIRECT BINANCE SPOT REST)
 ========================================================= */
-async function fetchMarketData() {
+async function fetchSpotData() {
     try {
-        let spotData = await safeFetch('https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT"]');
+        let spotRes = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT"]');
+        let spotData = await spotRes.json();
+        
         spotData.forEach(s => {
             let asset = s.symbol.replace('USDT','');
             AppState.market[asset].price = parseFloat(s.lastPrice);
             AppState.market[asset].change = parseFloat(s.priceChangePercent);
         });
         updateSourceStatus('spot', 'LIVE');
-        updateSourceStatus('cg', 'STANDBY');
     } catch (e) {
-        // Fallback to CoinGecko
-        try {
-            let cgData = await safeFetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true');
-            AppState.market.BTC.price = cgData.bitcoin.usd;
-            AppState.market.BTC.change = cgData.bitcoin.usd_24h_change;
-            AppState.market.ETH.price = cgData.ethereum.usd;
-            AppState.market.ETH.change = cgData.ethereum.usd_24h_change;
-            updateSourceStatus('spot', 'STANDBY');
-            updateSourceStatus('cg', 'LIVE');
-        } catch (err) {
-            updateSourceStatus('spot', 'ERROR');
-            updateSourceStatus('cg', 'ERROR');
-        }
+        updateSourceStatus('spot', 'ERROR');
     }
 
     for(let asset of ['BTC', 'ETH']) {
         try {
-            let klines = await safeFetch(`https://api.binance.com/api/v3/klines?symbol=${asset}USDT&interval=5m&limit=50`);
+            let klineRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${asset}USDT&interval=5m&limit=50`);
+            let klines = await klineRes.json();
             AppState.market[asset].klines = klines;
             let closes = klines.map(k => parseFloat(k[4]));
             AppState.ta[asset] = {
@@ -411,71 +378,120 @@ async function fetchMarketData() {
     }
 }
 
-async function fetchOptionsData() {
+/* =========================================================
+   4. BINANCE LIVE OPTIONS WEBSOCKET (CORS-FREE NATIVE FEED)
+========================================================= */
+function parseOptionSymbol(symbol) {
+    // Format: BTC-260327-90000-C or ETH-260327-3000-P
+    const parts = symbol.split('-');
+    if (parts.length < 4) return null;
+    const asset = parts[0];
+    const dateStr = parts[1];
+    const strike = parseFloat(parts[2]);
+    const side = parts[3].toUpperCase() === 'C' ? 'CALL' : 'PUT';
+
+    const year = 2000 + parseInt(dateStr.substring(0, 2), 10);
+    const month = parseInt(dateStr.substring(2, 4), 10) - 1;
+    const day = parseInt(dateStr.substring(4, 6), 10);
+    const expiry = Date.UTC(year, month, day, 8, 0, 0);
+
+    return { asset, strike, side, expiry, symbol };
+}
+
+let wsConnection = null;
+
+function connectOptionsWebSocket() {
+    updateSourceStatus('opt', 'CONNECTING');
+    document.getElementById('app-status').innerText = 'Connecting to Binance WebSocket...';
+
+    // Official Binance combined stream for Option Mark Price, Greeks, and Bids/Asks
+    const wsUrl = 'wss://fstream.binance.com/market/stream?streams=btcusdt@optionMarkPrice/ethusdt@optionMarkPrice';
+    
     try {
-        let [exInfo, tickers, marks] = await Promise.all([
-            safeFetch('https://eapi.binance.com/eapi/v1/exchangeInfo'),
-            safeFetch('https://eapi.binance.com/eapi/v1/ticker'),
-            safeFetch('https://eapi.binance.com/eapi/v1/mark')
-        ]);
+        wsConnection = new WebSocket(wsUrl);
 
-        let tickerMap = {};
-        tickers.forEach(t => tickerMap[t.symbol] = t);
-        let markMap = {};
-        marks.forEach(m => markMap[m.symbol] = m);
+        wsConnection.onopen = () => {
+            updateSourceStatus('opt', 'LIVE');
+            document.getElementById('app-status').innerText = 'Live Feed Active (WebSocket)';
+            document.getElementById('app-status').className = 'live';
+        };
 
-        let btcChain = [], ethChain = [];
-        let now = Date.now();
-
-        if (exInfo && exInfo.optionSymbols) {
-            exInfo.optionSymbols.forEach(opt => {
-                if(opt.expiryDate < now) return;
-
-                let t = tickerMap[opt.symbol] || {};
-                let m = markMap[opt.symbol] || {};
-
-                let contract = {
-                    symbol: opt.symbol,
-                    asset: opt.baseAsset,
-                    side: opt.side,
-                    strike: parseFloat(opt.strikePrice),
-                    expiry: parseInt(opt.expiryDate),
-                    mark: parseFloat(m.markPrice || 0),
-                    bid: parseFloat(t.bidPrice || 0),
-                    ask: parseFloat(t.askPrice || 0),
-                    iv: parseFloat(m.markIV || 0),
-                    delta: parseFloat(m.delta || 0),
-                    volume: parseFloat(t.volume || 0),
-                    oi: parseFloat(t.openInterest || 0)
-                };
-                
-                if(contract.bid > 0 && contract.ask > 0 && contract.mark > 0) {
-                    contract.spread = ((contract.ask - contract.bid) / contract.mark) * 100;
-                } else {
-                    contract.spread = 999;
+        wsConnection.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg && msg.data) {
+                    processIncomingOptions(msg.data);
                 }
+            } catch (err) {}
+        };
 
-                if(contract.asset === 'BTC') btcChain.push(contract);
-                if(contract.asset === 'ETH') ethChain.push(contract);
-            });
-        }
+        wsConnection.onerror = () => {
+            updateSourceStatus('opt', 'ERROR');
+        };
 
-        AppState.options.BTC = btcChain;
-        AppState.options.ETH = ethChain;
-        updateSourceStatus('opt', 'LIVE');
-        document.getElementById('app-status').innerText = 'Data Feed Active';
-        document.getElementById('app-status').className = 'live';
-    } catch (e) {
+        wsConnection.onclose = () => {
+            updateSourceStatus('opt', 'STANDBY');
+            // Auto-reconnect after 3 seconds if disconnected
+            setTimeout(connectOptionsWebSocket, 3000);
+        };
+    } catch(err) {
         updateSourceStatus('opt', 'ERROR');
-        document.getElementById('app-status').innerText = 'OPTION DATA UNAVAILABLE';
-        document.getElementById('app-status').className = 'error';
     }
 }
 
+function processIncomingOptions(data) {
+    const items = Array.isArray(data) ? data : [data];
+    const now = Date.now();
+
+    items.forEach(item => {
+        if (!item || !item.s) return;
+        const parsed = parseOptionSymbol(item.s);
+        if (!parsed || parsed.expiry < now) return;
+
+        const mark = parseFloat(item.mp) || 0;
+        const bid = parseFloat(item.bo) || 0;
+        const ask = parseFloat(item.ao) || 0;
+        const iv = parseFloat(item.vo) || 0;
+        const delta = parseFloat(item.d) || 0;
+        const gamma = parseFloat(item.g) || 0;
+        const theta = parseFloat(item.t) || 0;
+        const vega = parseFloat(item.vega) || 0;
+
+        let spread = 999;
+        if (bid > 0 && ask > 0 && mark > 0) {
+            spread = ((ask - bid) / mark) * 100;
+        } else if (ask > 0 && mark > 0) {
+            spread = ((ask - mark) / mark) * 100;
+        }
+
+        liveOptionStore[item.s] = {
+            symbol: item.s,
+            asset: parsed.asset,
+            side: parsed.side,
+            strike: parsed.strike,
+            expiry: parsed.expiry,
+            mark,
+            bid,
+            ask: ask > 0 ? ask : mark,
+            iv,
+            delta,
+            gamma,
+            theta,
+            vega,
+            spread: Math.max(0, spread),
+            volume: (parseFloat(item.aq) || 1) * 10
+        };
+    });
+
+    // Update state store
+    AppState.options.BTC = Object.values(liveOptionStore).filter(o => o.asset === 'BTC');
+    AppState.options.ETH = Object.values(liveOptionStore).filter(o => o.asset === 'ETH');
+}
+
 /* =========================================================
-   5. AUTO-PICK & SCORING SYSTEM
+   5. AUTO-PICK & SELECTION ENGINE
 ========================================================= */
-function generateAutoPicks() {
+function evaluateSetups() {
     AppState.autopicks = [];
     
     ['BTC', 'ETH'].forEach(asset => {
@@ -488,13 +504,13 @@ function generateAutoPicks() {
         let log = [];
         
         if(ta.ema9 > ta.ema20) { score += 12; log.push("Short-term momentum: EMA9 > EMA20 (+12)"); }
-        else { score -= 12; log.push("Short-term weakness: EMA9 < EMA20 (-12)"); }
+        else { score -= 12; log.push("Short-term momentum: EMA9 < EMA20 (-12)"); }
         
-        if(ta.price > ta.ema50) { score += 10; log.push("Trend structure: Price above EMA50 (+10)"); }
-        else { score -= 10; log.push("Trend structure: Price below EMA50 (-10)"); }
+        if(ta.price > ta.ema50) { score += 10; log.push("Structure: Price above EMA50 (+10)"); }
+        else { score -= 10; log.push("Structure: Price below EMA50 (-10)"); }
         
-        if(ta.price > ta.vwap) { score += 10; log.push("Intraday baseline: Price above VWAP (+10)"); }
-        else { score -= 10; log.push("Intraday baseline: Price below VWAP (-10)"); }
+        if(ta.price > ta.vwap) { score += 10; log.push("Baseline: Price above VWAP (+10)"); }
+        else { score -= 10; log.push("Baseline: Price below VWAP (-10)"); }
         
         if(ta.rsi > 50 && ta.rsi < 70) { score += 10; log.push(`RSI constructive (${ta.rsi.toFixed(1)})`); }
         else if(ta.rsi < 50 && ta.rsi > 30) { score -= 10; log.push(`RSI softening (${ta.rsi.toFixed(1)})`); }
@@ -516,7 +532,7 @@ function generateAutoPicks() {
         
         const rankContract = (opt, isCall, techScore) => {
             let cScore = techScore * 0.5;
-            let spreadScore = Math.max(0, 100 - (opt.spread * 10));
+            let spreadScore = Math.max(0, 100 - (opt.spread * 5));
             cScore += spreadScore * 0.2;
             
             let targetDelta = AppState.settings.strategy === 'conservative' ? 0.6 : (AppState.settings.strategy === 'balanced' ? 0.4 : 0.2);
@@ -562,10 +578,11 @@ function generateAutoPicks() {
 
     renderAutoPicks();
     renderOptionChain();
+    renderPaperTrades();
 }
 
 /* =========================================================
-   6. UI FORMATTING & ACTIONS
+   6. UI RENDERING & ACTIONS
 ========================================================= */
 function formatTime(ms) {
     let d = new Date(ms);
@@ -618,7 +635,6 @@ function showWhy(idx) {
         <div style="margin-bottom:12px;"><strong>Contract Metrics:</strong><br>
         • Delta: ${p.opt.delta}<br>
         • Bid/Ask Spread: ${p.opt.spread.toFixed(2)}%<br>
-        • Volume: ${p.opt.volume}<br>
         • Implied Volatility: ${(p.opt.iv * 100).toFixed(1)}%
         </div>
         <div><strong>Risk/Reward Ratio:</strong> ${p.rr}:1 based on technical ATR volatility.</div>
@@ -658,7 +674,7 @@ function renderOptionChain() {
         let p = puts[strike];
         if(!c && !p) return;
         
-        let isAtm = Math.abs(strike - currentPrice) < (asset === 'BTC' ? 600 : 60);
+        let isAtm = Math.abs(strike - currentPrice) < (asset === 'BTC' ? 800 : 80);
 
         let tr = document.createElement('tr');
         if(isAtm) tr.style.background = 'rgba(240, 185, 11, 0.12)';
@@ -685,7 +701,7 @@ function renderOptionChain() {
 document.getElementById('chain-asset-select').addEventListener('change', renderOptionChain);
 
 /* =========================================================
-   7. PAPER TRADING ENGINE
+   7. PAPER TRADING SYSTEM
 ========================================================= */
 function addPaperTrade(autopickIdx) {
     let p = AppState.autopicks[autopickIdx];
@@ -710,12 +726,7 @@ function closePaperTrade(id) {
     let idx = AppState.paperTrades.findIndex(t => t.id === id);
     if(idx > -1) {
         let t = AppState.paperTrades[idx];
-        let currentOpt = null;
-        ['BTC', 'ETH'].forEach(a => {
-            let found = AppState.options[a].find(o => o.symbol === t.contract);
-            if(found) currentOpt = found;
-        });
-        
+        let currentOpt = liveOptionStore[t.contract];
         let exitPrice = currentOpt ? currentOpt.mark : t.entry;
         let pnl = (exitPrice - t.entry) * t.qty;
         
@@ -746,12 +757,7 @@ function renderPaperTrades() {
     let openPnlTotal = 0;
 
     AppState.paperTrades.forEach(t => {
-        let currentOpt = null;
-        ['BTC', 'ETH'].forEach(a => {
-            let found = AppState.options[a].find(o => o.symbol === t.contract);
-            if(found) currentOpt = found;
-        });
-
+        let currentOpt = liveOptionStore[t.contract];
         let currentPrice = currentOpt ? currentOpt.mark : t.entry;
         let pnl = (currentPrice - t.entry) * t.qty;
         openPnlTotal += pnl;
@@ -790,23 +796,26 @@ function renderPaperTrades() {
 }
 
 /* =========================================================
-   8. MAIN REFRESH LOOP
+   8. RUNTIME LOOP & TIMERS
 ========================================================= */
-async function appLoop() {
-    await fetchMarketData();
-    await fetchOptionsData();
-    generateAutoPicks();
-    renderPaperTrades();
-    
-    let now = new Date();
-    document.getElementById('last-update').innerText = `Last update: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+async function initApp() {
+    // 1. Fetch spot prices & TA
+    await fetchSpotData();
+    // 2. Open live WebSocket stream for options
+    connectOptionsWebSocket();
+
+    // 3. Periodic UI update & evaluate signals every 2 seconds
+    setInterval(() => {
+        evaluateSetups();
+        let now = new Date();
+        document.getElementById('last-update').innerText = `Last update: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+    }, 2000);
+
+    // 4. Refresh spot prices every 15 seconds
+    setInterval(fetchSpotData, 15000);
 }
 
-// Initial Run
-appLoop();
-
-// Auto refresh every 25 seconds
-setInterval(appLoop, 25000);
+initApp();
 </script>
 </body>
 </html>
