@@ -16,54 +16,90 @@
             --red: #F6465D;
             --yellow: #F0B90B;
             --blue: #2962FF;
-            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background-color: var(--bg-base); color: var(--text-main); font-family: var(--font-family); font-size: 14px; overflow-x: hidden; }
+        body { background-color: var(--bg-base); color: var(--text-main); font-family: var(--font-family); font-size: 13px; overflow-x: hidden; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: var(--bg-panel); border-bottom: 1px solid var(--border); }
-        .header h1 { font-size: 18px; font-weight: 600; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: var(--bg-panel); border-bottom: 1px solid var(--border); }
+        .header h1 { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
         .header-actions { display: flex; gap: 15px; align-items: center; }
         
-        .container { padding: 20px; max-width: 1600px; margin: 0 auto; }
+        .container { padding: 18px; max-width: 1600px; margin: 0 auto; }
         
         .ds-monitor { display: flex; gap: 20px; padding: 10px 20px; background: #121418; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 500; overflow-x: auto; }
         .status-dot { margin-right: 5px; }
         .live { color: var(--green); } .standby { color: var(--yellow); } .error { color: var(--red); }
         
-        .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
-        .tab { padding: 10px 20px; background: var(--bg-panel); cursor: pointer; color: var(--text-muted); font-weight: 600; border-top-left-radius: 4px; border-top-right-radius: 4px; }
+        .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+        .tab { padding: 10px 20px; background: var(--bg-panel); cursor: pointer; color: var(--text-muted); font-weight: 600; border-top-left-radius: 4px; border-top-right-radius: 4px; border: 1px solid transparent; border-bottom: none; }
         .tab.active { background: var(--bg-hover); color: var(--text-main); border-bottom: 2px solid var(--yellow); }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px; }
-        .card { background: var(--bg-panel); padding: 15px; border-radius: 6px; border: 1px solid var(--border); }
-        .card-header { font-size: 16px; font-weight: 600; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 10px; display: flex; justify-content: space-between; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+        .grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 18px; }
+        .card { background: var(--bg-panel); padding: 16px; border-radius: 6px; border: 1px solid var(--border); }
+        .card-header { font-size: 15px; font-weight: 600; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
         
         .table-container { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
-        th { color: var(--text-muted); font-weight: 500; padding: 10px; border-bottom: 1px solid var(--border); }
-        td { padding: 10px; border-bottom: 1px solid var(--bg-hover); }
+        th { color: var(--text-muted); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--bg-hover); vertical-align: middle; }
         tr:hover { background: var(--bg-hover); }
         
         .up { color: var(--green); } .down { color: var(--red); }
         .badge { padding: 3px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; }
         .badge-call { background: rgba(14, 203, 129, 0.2); color: var(--green); }
         .badge-put { background: rgba(246, 70, 93, 0.2); color: var(--red); }
+        .badge-fee { background: rgba(240, 185, 11, 0.15); color: var(--yellow); font-size: 10px; font-weight: 600; padding: 2px 5px; border-radius: 3px; }
         
-        button { background: var(--bg-hover); color: var(--text-main); border: 1px solid var(--border); padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: 0.2s; }
+        button { background: var(--bg-hover); color: var(--text-main); border: 1px solid var(--border); padding: 7px 12px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: 0.2s; font-size: 12px; }
         button:hover { background: #3b424a; }
-        button.primary { background: var(--yellow); color: #000; border: none; }
+        button.primary { background: var(--yellow); color: #000; border: none; font-weight: 600; }
         button.primary:hover { background: #e0ac0a; }
         button.danger { background: var(--red); color: #fff; border: none; }
-        input, select { background: var(--bg-base); color: var(--text-main); border: 1px solid var(--border); padding: 8px; border-radius: 4px; width: 100%; margin-bottom: 10px; }
+        input, select { background: var(--bg-base); color: var(--text-main); border: 1px solid var(--border); padding: 8px 10px; border-radius: 4px; width: 100%; margin-bottom: 10px; font-size: 13px; }
+
+        .qty-input {
+            width: 72px !important;
+            padding: 5px 6px !important;
+            text-align: center;
+            margin: 0 !important;
+            background: var(--bg-base);
+            color: var(--text-main);
+            border: 1px solid #474D57 !important;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .qty-input:focus {
+            border-color: var(--yellow) !important;
+            outline: none;
+        }
+
+        .chart-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            cursor: pointer;
+            margin-left: 6px;
+            font-size: 14px;
+            transition: transform 0.15s ease;
+        }
+        .chart-link:hover { transform: scale(1.25); }
+
+        .fee-subtext {
+            display: block;
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
         
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
-        .modal { background: var(--bg-panel); padding: 20px; border-radius: 6px; border: 1px solid var(--border); width: 440px; max-width: 90%; max-height: 90vh; overflow-y: auto;}
-        .modal-header { font-size: 18px; font-weight: 600; margin-bottom: 15px; display: flex; justify-content: space-between;}
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 1000; justify-content: center; align-items: center; }
+        .modal { background: var(--bg-panel); padding: 20px; border-radius: 6px; border: 1px solid var(--border); width: 450px; max-width: 90%; max-height: 90vh; overflow-y: auto;}
+        .modal-header { font-size: 16px; font-weight: 600; margin-bottom: 14px; display: flex; justify-content: space-between;}
         .close-btn { cursor: pointer; font-size: 20px; color: var(--text-muted); }
         .disclaimer { font-size: 11px; color: var(--text-muted); margin-top: 20px; text-align: center; }
     </style>
@@ -71,7 +107,7 @@
 <body>
 
     <header class="header">
-        <h1>BINANCE CRYPTO OPTIONS AUTO-PICK <span class="badge" style="background:#2962FF; color:#fff; margin-left:10px;">PAPER TRADING MODE</span></h1>
+        <h1>BINANCE CRYPTO OPTIONS AUTO-PICK <span class="badge" style="background:#2962FF; color:#fff;">NET P&L / PAPER TRADING</span></h1>
         <div class="header-actions">
             <span id="last-update" style="color: var(--text-muted); font-size: 12px;">Connecting to feed...</span>
         </div>
@@ -96,26 +132,26 @@
             <div class="grid-2">
                 <div class="card">
                     <div class="card-header">Bitcoin (BTC) <span id="btc-trend" class="badge">--</span></div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                         <div>
                             <div style="font-size: 24px; font-weight: bold;" id="btc-price">$--</div>
                             <div id="btc-change" class="up">--%</div>
                         </div>
                         <div style="text-align: right; font-size: 12px; color: var(--text-muted);">
-                            <div>RSI (14): <span id="btc-rsi">--</span></div>
+                            <div>RSI (14): <span id="btc-rsi" style="color:var(--text-main);">--</span></div>
                             <div>Setup Score: <span id="btc-score" style="color:var(--text-main); font-weight:bold;">--/100</span></div>
                         </div>
                     </div>
                 </div>
                 <div class="card">
                     <div class="card-header">Ethereum (ETH) <span id="eth-trend" class="badge">--</span></div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                         <div>
                             <div style="font-size: 24px; font-weight: bold;" id="eth-price">$--</div>
                             <div id="eth-change" class="up">--%</div>
                         </div>
                         <div style="text-align: right; font-size: 12px; color: var(--text-muted);">
-                            <div>RSI (14): <span id="eth-rsi">--</span></div>
+                            <div>RSI (14): <span id="eth-rsi" style="color:var(--text-main);">--</span></div>
                             <div>Setup Score: <span id="eth-score" style="color:var(--text-main); font-weight:bold;">--/100</span></div>
                         </div>
                     </div>
@@ -123,7 +159,10 @@
             </div>
 
             <div class="card">
-                <div class="card-header">AUTO PICKS (Qualified Setups)</div>
+                <div class="card-header">
+                    AUTO PICKS (Qualified Setups)
+                    <span class="badge-fee">Est. Binance Fee Model Active (0.02% / 10% Cap)</span>
+                </div>
                 <div class="table-container">
                     <table id="autopicks-table">
                         <thead>
@@ -155,7 +194,7 @@
             <div class="card">
                 <div class="card-header">
                     Live Binance Option Chain
-                    <select id="chain-asset-select" style="width: 150px; margin: 0;">
+                    <select id="chain-asset-select" style="width: 140px; margin: 0;">
                         <option value="BTC">BTC</option>
                         <option value="ETH">ETH</option>
                     </select>
@@ -182,23 +221,85 @@
 
         <!-- TAB: PAPER TRADING -->
         <div id="tab-paper" class="tab-content">
-            <div class="grid-4">
-                <div class="card"><div class="card-header" style="border:none; margin:0; padding:0;">Total P&L</div><div id="pt-total-pnl" style="font-size:24px; font-weight:bold; margin-top:10px;">$0.00</div></div>
-                <div class="card"><div class="card-header" style="border:none; margin:0; padding:0;">Open P&L</div><div id="pt-open-pnl" style="font-size:24px; font-weight:bold; margin-top:10px;">$0.00</div></div>
-                <div class="card"><div class="card-header" style="border:none; margin:0; padding:0;">Win Rate</div><div id="pt-winrate" style="font-size:24px; font-weight:bold; margin-top:10px;">0%</div></div>
-                <div class="card"><div class="card-header" style="border:none; margin:0; padding:0;">Total Trades</div><div id="pt-total-trades" style="font-size:24px; font-weight:bold; margin-top:10px;">0</div></div>
+            <div class="grid-5">
+                <div class="card">
+                    <div class="card-header" style="border:none; margin:0; padding:0; font-size:12px; color:var(--text-muted);">Total Net P&L (All)</div>
+                    <div id="pt-total-pnl" style="font-size:22px; font-weight:bold; margin-top:8px;">$0.00</div>
+                    <span class="fee-subtext">After all fees</span>
+                </div>
+                <div class="card">
+                    <div class="card-header" style="border:none; margin:0; padding:0; font-size:12px; color:var(--text-muted);">Open Net P&L</div>
+                    <div id="pt-open-pnl" style="font-size:22px; font-weight:bold; margin-top:8px;">$0.00</div>
+                    <span class="fee-subtext">Includes entry + est. exit fee</span>
+                </div>
+                <div class="card">
+                    <div class="card-header" style="border:none; margin:0; padding:0; font-size:12px; color:var(--text-muted);">Closed Realized P&L</div>
+                    <div id="pt-realized-pnl" style="font-size:22px; font-weight:bold; margin-top:8px;">$0.00</div>
+                    <span class="fee-subtext">Net after round-trip fees</span>
+                </div>
+                <div class="card">
+                    <div class="card-header" style="border:none; margin:0; padding:0; font-size:12px; color:var(--text-muted);">Total Fees Paid / Est.</div>
+                    <div id="pt-total-fees" style="font-size:22px; font-weight:bold; margin-top:8px; color:var(--yellow);">$0.00</div>
+                    <span class="fee-subtext">Binance Options exchange fee</span>
+                </div>
+                <div class="card">
+                    <div class="card-header" style="border:none; margin:0; padding:0; font-size:12px; color:var(--text-muted);">Win Rate (Closed)</div>
+                    <div id="pt-winrate" style="font-size:22px; font-weight:bold; margin-top:8px;">0%</div>
+                    <div id="pt-total-trades" style="font-size:11px; color:var(--text-muted); margin-top:2px;">0 trades</div>
+                </div>
             </div>
-            <div class="card">
-                <div class="card-header">Open Paper Positions</div>
+
+            <div class="card" style="margin-bottom: 20px;">
+                <div class="card-header">
+                    Open Paper Positions
+                    <span class="fee-subtext">Live P&L updates continuously minus entry & estimated exit fees</span>
+                </div>
                 <div class="table-container">
                     <table id="paper-table">
                         <thead>
                             <tr>
-                                <th>Time</th><th>Type</th><th>Contract</th><th>Entry</th><th>Current</th><th>Qty</th><th>T1</th><th>SL1</th><th>Unrealized P&L</th><th>Actions</th>
+                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Contract</th>
+                                <th>Entry</th>
+                                <th>Current</th>
+                                <th style="text-align:center;">Qty</th>
+                                <th>Round-Trip Fee</th>
+                                <th>Target 1</th>
+                                <th>Stop Loss</th>
+                                <th>Gross P&L</th>
+                                <th>Net Unrealized P&L</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="paper-body"></tbody>
                     </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    Closed Position History
+                    <span class="fee-subtext">Historical completed trades with actual deducted Binance fees</span>
+                </div>
+                <div class="table-container">
+                    <table id="history-table">
+                        <thead>
+                            <tr>
+                                <th>Closed Time</th>
+                                <th>Type</th>
+                                <th>Contract</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>Qty</th>
+                                <th>Total Fee</th>
+                                <th>Gross Return</th>
+                                <th>Net Realized P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-body"></tbody>
+                    </table>
+                    <div id="no-history-msg" style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 12px;">No closed trades yet</div>
                 </div>
             </div>
         </div>
@@ -206,7 +307,16 @@
         <!-- TAB: SETTINGS -->
         <div id="tab-settings" class="tab-content">
             <div class="card" style="max-width: 600px;">
-                <div class="card-header">Risk & Selection Settings</div>
+                <div class="card-header">Risk, Selection & Fee Settings</div>
+                
+                <label>Binance Option Fee Rate (% of Underlying Price)</label>
+                <input type="number" id="set-fee-rate" step="0.001" value="0.02">
+                <span class="fee-subtext" style="margin-bottom:12px;">Standard Binance Options rate is 0.02% (0.0002) of underlying index price.</span>
+
+                <label>Max Fee Cap (% of Option Premium)</label>
+                <input type="number" id="set-fee-cap" step="0.1" value="10">
+                <span class="fee-subtext" style="margin-bottom:12px;">Binance cap rule: Fee per contract cannot exceed 10% of option premium.</span>
+
                 <label>Minimum Setup Score (0-100)</label>
                 <input type="number" id="set-min-score" value="65">
                 
@@ -220,13 +330,15 @@
                     <option value="aggressive">Aggressive (OTM, Delta ~0.2)</option>
                 </select>
 
-                <button class="primary" onclick="saveSettings()">Save Settings</button>
-                <button class="danger" style="margin-left: 10px;" onclick="clearData()">Reset Local Data</button>
+                <div style="margin-top: 15px;">
+                    <button class="primary" onclick="saveSettings()">Save Settings</button>
+                    <button class="danger" style="margin-left: 10px;" onclick="clearData()">Reset Local Data</button>
+                </div>
             </div>
         </div>
 
         <div class="disclaimer">
-            <strong>ANTI-FALSE-SIGNAL NOTICE:</strong> This application is strictly an educational research and paper-trading dashboard. It does not place live orders or promise trading profits.
+            <strong>ANTI-FALSE-SIGNAL NOTICE:</strong> This application is strictly an educational research and paper-trading dashboard. It does not place live orders or promise trading profits. All P&L metrics account for simulated Binance exchange transaction fees.
         </div>
     </div>
 
@@ -243,10 +355,29 @@
 
 <script>
 /* =========================================================
-   1. STATE & STORAGE MANAGEMENT
+   1. UTILITIES & LINK BUILDERS
+========================================================= */
+function getBinanceOptionUrl(contract) {
+    if (!contract) return 'https://www.binance.com/en/eoptions';
+    const asset = contract.split('-')[0] || 'ETH';
+    return `https://www.binance.com/en/eoptions/${asset}USDT/${contract}`;
+}
+
+function openBinanceOptionChart(contract) {
+    window.open(getBinanceOptionUrl(contract), '_blank');
+}
+
+/* =========================================================
+   2. STATE & STORAGE MANAGEMENT
 ========================================================= */
 const AppState = {
-    settings: JSON.parse(localStorage.getItem('appSettings')) || { minScore: 65, maxSpread: 15, strategy: 'balanced' },
+    settings: JSON.parse(localStorage.getItem('appSettings')) || { 
+        minScore: 65, 
+        maxSpread: 15, 
+        strategy: 'balanced',
+        feeRatePercent: 0.02, // 0.02% of underlying
+        feeCapPercent: 10     // 10% of premium
+    },
     paperTrades: JSON.parse(localStorage.getItem('paperTrades')) || [],
     tradeHistory: JSON.parse(localStorage.getItem('tradeHistory')) || [],
     market: { BTC: { price: 0, change: 0, klines: [] }, ETH: { price: 0, change: 0, klines: [] } },
@@ -255,17 +386,29 @@ const AppState = {
     autopicks: []
 };
 
-// Map to hold live streaming options contracts
+// Ensure migration for existing trades
+AppState.paperTrades.forEach(t => {
+    if (typeof t.qty !== 'number' || isNaN(t.qty) || t.qty <= 0) t.qty = 1;
+    if (typeof t.underlyingAtEntry !== 'number') {
+        const asset = t.contract.split('-')[0];
+        t.underlyingAtEntry = AppState.market[asset] ? AppState.market[asset].price : (asset === 'BTC' ? 90000 : 2700);
+    }
+});
+
 const liveOptionStore = {};
 
 document.getElementById('set-min-score').value = AppState.settings.minScore;
 document.getElementById('set-max-spread').value = AppState.settings.maxSpread;
 document.getElementById('set-strategy').value = AppState.settings.strategy;
+document.getElementById('set-fee-rate').value = AppState.settings.feeRatePercent ?? 0.02;
+document.getElementById('set-fee-cap').value = AppState.settings.feeCapPercent ?? 10;
 
 function saveSettings() {
     AppState.settings.minScore = parseInt(document.getElementById('set-min-score').value);
     AppState.settings.maxSpread = parseFloat(document.getElementById('set-max-spread').value);
     AppState.settings.strategy = document.getElementById('set-strategy').value;
+    AppState.settings.feeRatePercent = parseFloat(document.getElementById('set-fee-rate').value);
+    AppState.settings.feeCapPercent = parseFloat(document.getElementById('set-fee-cap').value);
     localStorage.setItem('appSettings', JSON.stringify(AppState.settings));
     alert('Settings Saved!');
     evaluateSetups();
@@ -295,7 +438,38 @@ function updateSourceStatus(source, status) {
 }
 
 /* =========================================================
-   2. TECHNICAL ANALYSIS (UNDERLYING ASSETS)
+   3. BINANCE OPTIONS FEE ENGINE
+========================================================= */
+function calculateSingleLegFee(underlyingPrice, optionPrice, qty) {
+    const feeRate = (AppState.settings.feeRatePercent || 0.02) / 100; // e.g. 0.0002
+    const capRate = (AppState.settings.feeCapPercent || 10) / 100;     // e.g. 0.10
+
+    const rawFee = underlyingPrice * feeRate * qty;
+    const feeCap = optionPrice * capRate * qty;
+    
+    // Fee is min(0.02% * S, 10% * P)
+    return Math.max(0.0001, Math.min(rawFee, feeCap));
+}
+
+function computeTradeFees(trade, currentOptPrice, currentUnderlyingPrice) {
+    const qty = typeof trade.qty === 'number' ? trade.qty : 1;
+    const entryUnderlying = trade.underlyingAtEntry || currentUnderlyingPrice;
+
+    // Entry Fee (locked at entry)
+    const entryFee = calculateSingleLegFee(entryUnderlying, trade.entry, qty);
+    
+    // Estimated Exit Fee (at current market price)
+    const exitFee = calculateSingleLegFee(currentUnderlyingPrice, currentOptPrice, qty);
+
+    const totalFee = entryFee + exitFee;
+    const grossPnl = (currentOptPrice - trade.entry) * qty;
+    const netPnl = grossPnl - totalFee;
+
+    return { entryFee, exitFee, totalFee, grossPnl, netPnl };
+}
+
+/* =========================================================
+   4. TECHNICAL ANALYSIS ENGINE
 ========================================================= */
 const TA = {
     ema: (data, period) => {
@@ -342,7 +516,7 @@ const TA = {
 };
 
 /* =========================================================
-   3. SPOT MARKET DATA (DIRECT BINANCE SPOT REST)
+   5. SPOT MARKET DATA (BINANCE SPOT REST)
 ========================================================= */
 async function fetchSpotData() {
     try {
@@ -379,10 +553,9 @@ async function fetchSpotData() {
 }
 
 /* =========================================================
-   4. BINANCE LIVE OPTIONS WEBSOCKET (CORS-FREE NATIVE FEED)
+   6. BINANCE LIVE OPTIONS WEBSOCKET
 ========================================================= */
 function parseOptionSymbol(symbol) {
-    // Format: BTC-260327-90000-C or ETH-260327-3000-P
     const parts = symbol.split('-');
     if (parts.length < 4) return null;
     const asset = parts[0];
@@ -404,7 +577,6 @@ function connectOptionsWebSocket() {
     updateSourceStatus('opt', 'CONNECTING');
     document.getElementById('app-status').innerText = 'Connecting to Binance WebSocket...';
 
-    // Official Binance combined stream for Option Mark Price, Greeks, and Bids/Asks
     const wsUrl = 'wss://fstream.binance.com/market/stream?streams=btcusdt@optionMarkPrice/ethusdt@optionMarkPrice';
     
     try {
@@ -431,7 +603,6 @@ function connectOptionsWebSocket() {
 
         wsConnection.onclose = () => {
             updateSourceStatus('opt', 'STANDBY');
-            // Auto-reconnect after 3 seconds if disconnected
             setTimeout(connectOptionsWebSocket, 3000);
         };
     } catch(err) {
@@ -483,13 +654,12 @@ function processIncomingOptions(data) {
         };
     });
 
-    // Update state store
     AppState.options.BTC = Object.values(liveOptionStore).filter(o => o.asset === 'BTC');
     AppState.options.ETH = Object.values(liveOptionStore).filter(o => o.asset === 'ETH');
 }
 
 /* =========================================================
-   5. AUTO-PICK & SELECTION ENGINE
+   7. AUTO-PICK & SELECTION ENGINE
 ========================================================= */
 function evaluateSetups() {
     AppState.autopicks = [];
@@ -582,7 +752,7 @@ function evaluateSetups() {
 }
 
 /* =========================================================
-   6. UI RENDERING & ACTIONS
+   8. UI RENDERING & ACTIONS
 ========================================================= */
 function formatTime(ms) {
     let d = new Date(ms);
@@ -606,7 +776,10 @@ function renderAutoPicks() {
         tr.innerHTML = `
             <td><span class="badge ${isCall ? 'badge-call' : 'badge-put'}">${p.side}</span></td>
             <td><strong>${p.asset}</strong></td>
-            <td><a href="#" onclick="showWhy(${idx}); return false;" style="color:var(--yellow); text-decoration:underline;">${p.contract}</a></td>
+            <td>
+                <a href="#" onclick="showWhy(${idx}); return false;" style="color:var(--yellow); text-decoration:underline;">${p.contract}</a>
+                <a class="chart-link" href="${getBinanceOptionUrl(p.contract)}" target="_blank" title="Open Binance Option Chart">📈</a>
+            </td>
             <td>$${p.strike}</td>
             <td>${formatTime(p.expiry)}</td>
             <td>$${p.entry.toFixed(2)}</td>
@@ -618,7 +791,7 @@ function renderAutoPicks() {
             <td>${p.rr}</td>
             <td>
                 <button class="primary" onclick="addPaperTrade(${idx})">Paper Trade</button>
-                <button onclick="openChart('${p.asset}')">📈</button>
+                <button onclick="openBinanceOptionChart('${p.contract}')" title="Open Binance Option Chart">📈</button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -641,10 +814,6 @@ function showWhy(idx) {
     `;
     document.getElementById('why-content').innerHTML = html;
     document.getElementById('why-modal').style.display = 'flex';
-}
-
-function openChart(asset) {
-    window.open(`https://www.tradingview.com/chart/?symbol=BINANCE:${asset}USDT`, '_blank');
 }
 
 function renderOptionChain() {
@@ -701,20 +870,25 @@ function renderOptionChain() {
 document.getElementById('chain-asset-select').addEventListener('change', renderOptionChain);
 
 /* =========================================================
-   7. PAPER TRADING SYSTEM
+   9. PAPER TRADING SYSTEM (WITH FULL FEE MODEL)
 ========================================================= */
 function addPaperTrade(autopickIdx) {
     let p = AppState.autopicks[autopickIdx];
+    const asset = p.asset;
+    const currentSpot = AppState.market[asset] ? AppState.market[asset].price : 0;
+
     let trade = {
         id: Date.now(),
         contract: p.contract,
         side: p.side,
         entry: p.entry,
-        qty: 1,
+        qty: 1, // Default 1
         t1: p.t1,
         sl1: p.sl1,
+        underlyingAtEntry: currentSpot,
         time: Date.now()
     };
+
     AppState.paperTrades.push(trade);
     localStorage.setItem('paperTrades', JSON.stringify(AppState.paperTrades));
     alert('Simulated paper trade added!');
@@ -722,18 +896,37 @@ function addPaperTrade(autopickIdx) {
     renderPaperTrades();
 }
 
+function updateTradeQty(id, newQty) {
+    let val = parseFloat(newQty);
+    if (isNaN(val) || val <= 0) val = 1;
+    let trade = AppState.paperTrades.find(t => t.id === id);
+    if (trade) {
+        trade.qty = val;
+        localStorage.setItem('paperTrades', JSON.stringify(AppState.paperTrades));
+        renderPaperTrades();
+    }
+}
+
 function closePaperTrade(id) {
     let idx = AppState.paperTrades.findIndex(t => t.id === id);
     if(idx > -1) {
         let t = AppState.paperTrades[idx];
+        const asset = t.contract.split('-')[0];
+        const currentSpot = AppState.market[asset] ? AppState.market[asset].price : (t.underlyingAtEntry || 0);
         let currentOpt = liveOptionStore[t.contract];
         let exitPrice = currentOpt ? currentOpt.mark : t.entry;
-        let pnl = (exitPrice - t.entry) * t.qty;
+
+        const feeData = computeTradeFees(t, exitPrice, currentSpot);
         
         AppState.tradeHistory.push({
             ...t,
             exit: exitPrice,
-            pnl: pnl,
+            underlyingAtExit: currentSpot,
+            entryFee: feeData.entryFee,
+            exitFee: feeData.exitFee,
+            totalFee: feeData.totalFee,
+            grossPnl: feeData.grossPnl,
+            netPnl: feeData.netPnl,
             closeTime: Date.now()
         });
         
@@ -752,66 +945,175 @@ function deletePaperTrade(id) {
 
 function renderPaperTrades() {
     let tbody = document.getElementById('paper-body');
+    let openNetPnlTotal = 0;
+    let openGrossPnlTotal = 0;
+    let openFeesTotal = 0;
+
+    const activeEl = document.activeElement;
+    let existingRows = tbody.querySelectorAll('tr[data-id]');
+    let existingIds = Array.from(existingRows).map(r => parseInt(r.getAttribute('data-id')));
+    let currentIds = AppState.paperTrades.map(t => t.id);
+
+    let canUpdateInPlace = existingIds.length === currentIds.length && existingIds.every((id, i) => id === currentIds[i]);
+
+    if (canUpdateInPlace && existingRows.length > 0) {
+        AppState.paperTrades.forEach(t => {
+            let row = tbody.querySelector(`tr[data-id="${t.id}"]`);
+            if (!row) return;
+
+            const asset = t.contract.split('-')[0];
+            const currentSpot = AppState.market[asset] ? AppState.market[asset].price : (t.underlyingAtEntry || 0);
+            let currentOpt = liveOptionStore[t.contract];
+            let currentPrice = currentOpt ? currentOpt.mark : t.entry;
+            
+            const feeData = computeTradeFees(t, currentPrice, currentSpot);
+            openNetPnlTotal += feeData.netPnl;
+            openGrossPnlTotal += feeData.grossPnl;
+            openFeesTotal += feeData.totalFee;
+
+            let curPriceEl = row.querySelector('.col-current-price');
+            if (curPriceEl) curPriceEl.innerText = `$${currentPrice.toFixed(2)}`;
+
+            let feeEl = row.querySelector('.col-fee');
+            if (feeEl) feeEl.innerHTML = `-$${feeData.totalFee.toFixed(3)} <span class="fee-subtext">Entry: -$${feeData.entryFee.toFixed(3)} | Est. Exit: -$${feeData.exitFee.toFixed(3)}</span>`;
+
+            let grossEl = row.querySelector('.col-gross');
+            if (grossEl) {
+                grossEl.innerText = `$${feeData.grossPnl.toFixed(2)}`;
+                grossEl.className = `col-gross ${feeData.grossPnl >= 0 ? 'up' : 'down'}`;
+            }
+
+            let netEl = row.querySelector('.col-net');
+            if (netEl) {
+                netEl.innerText = `$${feeData.netPnl.toFixed(2)}`;
+                netEl.className = `col-net ${feeData.netPnl >= 0 ? 'up' : 'down'}`;
+            }
+
+            let qtyInput = row.querySelector('.qty-input');
+            if (qtyInput && qtyInput !== activeEl) {
+                qtyInput.value = t.qty;
+            }
+        });
+    } else {
+        tbody.innerHTML = '';
+        AppState.paperTrades.forEach(t => {
+            const asset = t.contract.split('-')[0];
+            const currentSpot = AppState.market[asset] ? AppState.market[asset].price : (t.underlyingAtEntry || 0);
+            let currentOpt = liveOptionStore[t.contract];
+            let currentPrice = currentOpt ? currentOpt.mark : t.entry;
+
+            const feeData = computeTradeFees(t, currentPrice, currentSpot);
+            openNetPnlTotal += feeData.netPnl;
+            openGrossPnlTotal += feeData.grossPnl;
+            openFeesTotal += feeData.totalFee;
+
+            let tr = document.createElement('tr');
+            tr.setAttribute('data-id', t.id);
+            tr.innerHTML = `
+                <td>${formatTime(t.time)}</td>
+                <td><span class="badge ${t.side==='CALL'?'badge-call':'badge-put'}">${t.side}</span></td>
+                <td>
+                    <strong>${t.contract}</strong>
+                    <a class="chart-link" href="${getBinanceOptionUrl(t.contract)}" target="_blank" title="Open Binance Option Chart">📈</a>
+                </td>
+                <td>$${t.entry.toFixed(2)}</td>
+                <td class="col-current-price">$${currentPrice.toFixed(2)}</td>
+                <td style="text-align:center;">
+                    <input type="number" class="qty-input" min="0.001" step="any" value="${t.qty}"
+                        oninput="updateTradeQty(${t.id}, this.value)"
+                        onchange="updateTradeQty(${t.id}, this.value)">
+                </td>
+                <td class="col-fee" style="color:var(--yellow); font-size:12px;">
+                    -$${feeData.totalFee.toFixed(3)}
+                    <span class="fee-subtext">Entry: -$${feeData.entryFee.toFixed(3)} | Est. Exit: -$${feeData.exitFee.toFixed(3)}</span>
+                </td>
+                <td>$${t.t1.toFixed(2)}</td>
+                <td>$${t.sl1.toFixed(2)}</td>
+                <td class="col-gross ${feeData.grossPnl >= 0 ? 'up' : 'down'}">$${feeData.grossPnl.toFixed(2)}</td>
+                <td class="col-net ${feeData.netPnl >= 0 ? 'up' : 'down'}" style="font-weight:bold; font-size:13px;">
+                    $${feeData.netPnl.toFixed(2)}
+                </td>
+                <td>
+                    <button onclick="openBinanceOptionChart('${t.contract}')" title="Open Binance Option Chart" style="padding:5px 8px;">📈</button>
+                    <button class="primary" onclick="closePaperTrade(${t.id})" style="padding:5px 8px;">Close</button>
+                    <button onclick="deletePaperTrade(${t.id})" style="padding:5px 8px;">Delete</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Render Historical Closed Trades
+    renderTradeHistory();
+
+    // Calculate Totals Across Closed History
+    let realizedNetPnl = AppState.tradeHistory.reduce((sum, tr) => sum + (tr.netPnl || 0), 0);
+    let realizedFees = AppState.tradeHistory.reduce((sum, tr) => sum + (tr.totalFee || 0), 0);
+    let totalAllNetPnl = realizedNetPnl + openNetPnlTotal;
+    let totalAllFees = realizedFees + openFeesTotal;
+
+    // Update Top Portfolio Summary Cards
+    document.getElementById('pt-open-pnl').innerText = `$${openNetPnlTotal.toFixed(2)}`;
+    document.getElementById('pt-open-pnl').className = openNetPnlTotal >= 0 ? 'up' : 'down';
+
+    document.getElementById('pt-realized-pnl').innerText = `$${realizedNetPnl.toFixed(2)}`;
+    document.getElementById('pt-realized-pnl').className = realizedNetPnl >= 0 ? 'up' : 'down';
+    
+    document.getElementById('pt-total-pnl').innerText = `$${totalAllNetPnl.toFixed(2)}`;
+    document.getElementById('pt-total-pnl').className = totalAllNetPnl >= 0 ? 'up' : 'down';
+
+    document.getElementById('pt-total-fees').innerText = `$${totalAllFees.toFixed(2)}`;
+    
+    let totalClosedTrades = AppState.tradeHistory.length;
+    let winningTrades = AppState.tradeHistory.filter(tr => (tr.netPnl || 0) > 0).length;
+    document.getElementById('pt-total-trades').innerText = `${totalClosedTrades} closed trades (${AppState.paperTrades.length} open)`;
+    document.getElementById('pt-winrate').innerText = totalClosedTrades > 0 ? `${Math.round((winningTrades/totalClosedTrades)*100)}%` : '0%';
+}
+
+function renderTradeHistory() {
+    let tbody = document.getElementById('history-body');
     tbody.innerHTML = '';
-    
-    let openPnlTotal = 0;
 
-    AppState.paperTrades.forEach(t => {
-        let currentOpt = liveOptionStore[t.contract];
-        let currentPrice = currentOpt ? currentOpt.mark : t.entry;
-        let pnl = (currentPrice - t.entry) * t.qty;
-        openPnlTotal += pnl;
+    if (AppState.tradeHistory.length === 0) {
+        document.getElementById('no-history-msg').style.display = 'block';
+        return;
+    }
+    document.getElementById('no-history-msg').style.display = 'none';
 
-        let tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${formatTime(t.time)}</td>
-            <td><span class="badge ${t.side==='CALL'?'badge-call':'badge-put'}">${t.side}</span></td>
-            <td>${t.contract}</td>
-            <td>$${t.entry.toFixed(2)}</td>
-            <td>$${currentPrice.toFixed(2)}</td>
-            <td>${t.qty}</td>
-            <td>$${t.t1.toFixed(2)}</td>
-            <td>$${t.sl1.toFixed(2)}</td>
-            <td class="${pnl >= 0 ? 'up' : 'down'}">$${pnl.toFixed(2)}</td>
+    // Show latest closed trades first
+    [...AppState.tradeHistory].reverse().forEach(tr => {
+        let row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${formatTime(tr.closeTime || tr.time)}</td>
+            <td><span class="badge ${tr.side==='CALL'?'badge-call':'badge-put'}">${tr.side}</span></td>
             <td>
-                <button class="primary" onclick="closePaperTrade(${t.id})">Close</button>
-                <button onclick="deletePaperTrade(${t.id})">Delete</button>
+                <strong>${tr.contract}</strong>
+                <a class="chart-link" href="${getBinanceOptionUrl(tr.contract)}" target="_blank" title="Binance Chart">📈</a>
             </td>
+            <td>$${tr.entry.toFixed(2)}</td>
+            <td>$${(tr.exit || 0).toFixed(2)}</td>
+            <td>${tr.qty}</td>
+            <td style="color:var(--yellow);">-$${(tr.totalFee || 0).toFixed(3)}</td>
+            <td class="${(tr.grossPnl || 0) >= 0 ? 'up' : 'down'}">$${(tr.grossPnl || 0).toFixed(2)}</td>
+            <td class="${(tr.netPnl || 0) >= 0 ? 'up' : 'down'}" style="font-weight:bold;">$${(tr.netPnl || 0).toFixed(2)}</td>
         `;
-        tbody.appendChild(tr);
+        tbody.appendChild(row);
     });
-
-    document.getElementById('pt-open-pnl').innerText = `$${openPnlTotal.toFixed(2)}`;
-    document.getElementById('pt-open-pnl').className = openPnlTotal >= 0 ? 'up' : 'down';
-    
-    let realizedPnl = AppState.tradeHistory.reduce((sum, tr) => sum + tr.pnl, 0);
-    let totalPnl = realizedPnl + openPnlTotal;
-    document.getElementById('pt-total-pnl').innerText = `$${totalPnl.toFixed(2)}`;
-    document.getElementById('pt-total-pnl').className = totalPnl >= 0 ? 'up' : 'down';
-    
-    let totalTrades = AppState.tradeHistory.length;
-    let winningTrades = AppState.tradeHistory.filter(tr => tr.pnl > 0).length;
-    document.getElementById('pt-total-trades').innerText = totalTrades;
-    document.getElementById('pt-winrate').innerText = totalTrades > 0 ? `${Math.round((winningTrades/totalTrades)*100)}%` : '0%';
 }
 
 /* =========================================================
-   8. RUNTIME LOOP & TIMERS
+   10. RUNTIME LOOP & TIMERS
 ========================================================= */
 async function initApp() {
-    // 1. Fetch spot prices & TA
     await fetchSpotData();
-    // 2. Open live WebSocket stream for options
     connectOptionsWebSocket();
 
-    // 3. Periodic UI update & evaluate signals every 2 seconds
     setInterval(() => {
         evaluateSetups();
         let now = new Date();
         document.getElementById('last-update').innerText = `Last update: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
     }, 2000);
 
-    // 4. Refresh spot prices every 15 seconds
     setInterval(fetchSpotData, 15000);
 }
 
