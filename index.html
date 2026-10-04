@@ -182,6 +182,10 @@
                     <select id="chain-asset-select" style="width: 140px; margin: 0;">
                         <option value="BTC">BTC</option>
                         <option value="ETH">ETH</option>
+                        <option value="BNB">BNB</option>
+                        <option value="SOL">SOL</option>
+                        <option value="XRP">XRP</option>
+                        <option value="DOGE">DOGE</option>
                     </select>
                 </div>
                 <div class="table-container">
@@ -312,6 +316,10 @@
                 <select id="set-horizon"></select>
                 <span class="fee-subtext" style="margin-bottom:12px;">Sets timeframes, allowed expiries, hold length, targets and stops. Applied on Save.</span>
 
+                <label>Altcoin Options</label>
+                <div id="set-alts" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;"></div>
+                <span class="fee-subtext" style="margin-bottom:12px;">BTC and ETH are always on. Altcoin options are thinner, so expect wider spreads; the spread and break-even filters still apply.</span>
+
                 <label>Gate Sensitivity</label>
                 <select id="set-gate"></select>
                 <span class="fee-subtext" style="margin-bottom:12px;">Strict: ADX ≥ 22, all 3 timeframes agree, ≥ 1.0 ATR to support/resistance. Normal: ADX ≥ 18, mid + slow agree, ≥ 0.5 ATR. Relaxed: ADX ≥ 14, slow timeframe agrees, ≥ 0.25 ATR.</span>
@@ -363,6 +371,8 @@ function openBinanceOptionChart(contract) {
 /* =========================================================
    2. STATE & STORAGE MANAGEMENT
 ========================================================= */
+const ALL = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'DOGE'], ALT = ALL.slice(2), NAMES = { BTC: 'Bitcoin', ETH: 'Ethereum', BNB: 'BNB', SOL: 'Solana', XRP: 'XRP', DOGE: 'Dogecoin' };
+const ACTIVE = () => ['BTC', 'ETH', ...ALT.filter(a => (AppState.settings.alts || ALT).includes(a))];
 const AppState = {
     settings: JSON.parse(localStorage.getItem('appSettings')) || { 
         minScore: 65, 
@@ -373,9 +383,9 @@ const AppState = {
     },
     paperTrades: JSON.parse(localStorage.getItem('paperTrades')) || [],
     tradeHistory: JSON.parse(localStorage.getItem('tradeHistory')) || [],
-    market: { BTC: { price: 0, change: 0, klines: [] }, ETH: { price: 0, change: 0, klines: [] } },
-    options: { BTC: [], ETH: [] },
-    ta: { BTC: {}, ETH: {} },
+    market: Object.fromEntries(ALL.map(a => [a, { price: 0, change: 0, klines: [] }])),
+    options: Object.fromEntries(ALL.map(a => [a, []])),
+    ta: Object.fromEntries(ALL.map(a => [a, {}])),
     autopicks: []
 };
 
@@ -406,6 +416,8 @@ function saveSettings() {
     AppState.settings.horizon = hzNew;
     AppState.settings.gate = document.getElementById('set-gate').value;
     document.getElementById('gate-quick').value = AppState.settings.gate;
+    AppState.settings.alts = [...document.querySelectorAll('#set-alts input:checked')].map(i => i.value);
+    applyAssets();
     localStorage.setItem('appSettings', JSON.stringify(AppState.settings));
     alert('Settings Saved!');
     if (hzChanged) setHorizon(hzNew); else evaluateSetups();
@@ -547,7 +559,7 @@ async function setHorizon(v) {
     AppState.settings.horizon = v;
     localStorage.setItem('appSettings', JSON.stringify(AppState.settings));
     ['horizon-quick', 'set-horizon'].forEach(i => document.getElementById(i).value = v);
-    AppState.ta = { BTC: {}, ETH: {} }; AppState.autopicks = []; AppState.gates = {};
+    AppState.ta = Object.fromEntries(ALL.map(a => [a, {}])); AppState.autopicks = []; AppState.gates = {};
     const m = document.getElementById('no-picks-msg'); m.innerText = `Loading ${HZ[v].label} analysis…`; m.style.display = 'block';
     await fetchSpotData(); evaluateSetups();
 }
@@ -613,7 +625,7 @@ Object.assign(TA, {
 ========================================================= */
 async function fetchSpotData() {
     try {
-        let spotRes = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT"]');
+        let spotRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(ALL.map(a => a + 'USDT')))}`);
         let spotData = await spotRes.json();
         spotData.forEach(s => {
             let asset = s.symbol.replace('USDT', '');
@@ -625,7 +637,7 @@ async function fetchSpotData() {
 
     const HK = AppState.settings.horizon, H = HZ[HK], need = [...new Set([...H.tf, H.rv.tf])];
     const kl = async (a, iv) => (await fetch(`https://api.binance.com/api/v3/klines?symbol=${a}USDT&interval=${iv}&limit=250`)).json();
-    for (const asset of ['BTC', 'ETH']) {
+    for (const asset of ACTIVE()) {
         try {
             const K = Object.fromEntries(await Promise.all(need.map(async iv => [iv, await kl(asset, iv)])));
             const [kf, km, ks] = H.tf.map(iv => K[iv]), rc = K[H.rv.tf].map(k => +k[4]);
@@ -637,8 +649,8 @@ async function fetchSpotData() {
             AppState.ta[asset] = { hz: HK, tf, price: tf.f.price, vwap: TA.vwap(vk), rsi: tf.m.rsi, atr: tf.s.atr, rv: TA.rv(rc, H.rv.ppy, H.rv.n), ret: TA.logRet(rc) };
         } catch (e) {}
     }
-    const B = AppState.ta.BTC, E = AppState.ta.ETH, r = H.rv;
-    if (B && E && B.ret && E.ret && B.hz === HK && E.hz === HK) { B.ba = { ...TA.betaAlpha(B.ret, E.ret, r.baN, r.perDay), vs: 'ETH' }; E.ba = { ...TA.betaAlpha(E.ret, B.ret, r.baN, r.perDay), vs: 'BTC' }; }
+    const r = H.rv, ok = x => x && x.ret && x.hz === HK; // beta/alpha: BTC vs ETH, every other asset vs BTC
+    for (const a of ACTIVE()) { const t = AppState.ta[a], bm = a === 'BTC' ? AppState.ta.ETH : AppState.ta.BTC; if (ok(t) && ok(bm)) t.ba = { ...TA.betaAlpha(t.ret, bm.ret, r.baN, r.perDay), vs: a === 'BTC' ? 'ETH' : 'BTC' }; }
 }
 
 /* =========================================================
@@ -699,6 +711,18 @@ function connectOptionsWebSocket() {
     }
 }
 
+let altWs = null;
+function connectAltWebSocket() {
+    const alts = ACTIVE().filter(a => ALT.includes(a));
+    if (altWs) { altWs.onclose = null; altWs.close(); altWs = null; }
+    if (!alts.length) return;
+    try {
+        altWs = new WebSocket('wss://fstream.binance.com/market/stream?streams=' + alts.map(a => a.toLowerCase() + 'usdt@optionMarkPrice').join('/'));
+        altWs.onmessage = e => { try { const m = JSON.parse(e.data); if (m && m.data) processIncomingOptions(m.data); } catch (err) {} };
+        altWs.onclose = () => setTimeout(connectAltWebSocket, 5000);
+    } catch (err) {}
+}
+
 function processIncomingOptions(data) {
     const items = Array.isArray(data) ? data : [data];
     const now = Date.now();
@@ -743,8 +767,9 @@ function processIncomingOptions(data) {
         };
     });
 
-    AppState.options.BTC = Object.values(liveOptionStore).filter(o => o.asset === 'BTC');
-    AppState.options.ETH = Object.values(liveOptionStore).filter(o => o.asset === 'ETH');
+    const g = Object.fromEntries(ALL.map(a => [a, []]));
+    Object.values(liveOptionStore).forEach(o => g[o.asset] && g[o.asset].push(o));
+    ALL.forEach(a => AppState.options[a] = g[a]);
 }
 
 /* =========================================================
@@ -791,7 +816,7 @@ function evaluateSetups() {
     document.getElementById('hz-info').innerHTML = `<strong>${H.label}</strong> · ${H.tf.join(' / ')} candles · expiries ${fmtH(CFG.minHours)}–${fmtH(CFG.maxHours)} out · plan assumes ~${fmtH(CFG.holdH)} hold · targets &amp; stops in ${H.tf[2]} ATR · Gates: <strong>${G.label}</strong> (ADX ≥ ${G.minAdx} · ${G.desc} · room ≥ ${G.minRoom} ATR)`;
     const ar = v => v > 0.2 ? '<span class="up">▲</span>' : (v < -0.2 ? '<span class="down">▼</span>' : '◆');
 
-    ['BTC', 'ETH'].forEach(asset => {
+    ACTIVE().forEach(asset => {
         const id = asset.toLowerCase(), u = scoreUnderlying(asset), S = AppState.market[asset].price;
         if (!u || !S) return;
         const isCall = u.bull >= u.bear, dir = isCall ? 'CALL' : 'PUT', sgn = isCall ? 1 : -1, tech = isCall ? u.bull : u.bear;
@@ -879,6 +904,7 @@ function evaluateSetups() {
             ${status ? `<span class="down"><strong>NO TRADE</strong></span> — ${status}` : `<span class="up"><strong>${dir} qualified</strong></span> — top ${cands.slice(0, CFG.topN).length} strikes ranked below`}`;
     });
 
+    AppState.autopicks.sort((a, b) => b.score - a.score);
     renderAutoPicks();
     renderOptionChain();
     renderPaperTrades();
@@ -902,7 +928,7 @@ function renderAutoPicks() {
         return;
     }
     msg.style.display = 'none';
-    const f = (v, d = 2) => v.toFixed(d);
+    const f = (v, d = 2) => (d === 2 && Math.abs(v) > 0 && Math.abs(v) < 0.1) ? v.toPrecision(2) : v.toFixed(d);
     AppState.autopicks.forEach((p, idx) => {
         let tr = document.createElement('tr'), isCall = p.side === 'CALL';
         tr.innerHTML = `
@@ -925,7 +951,7 @@ function renderAutoPicks() {
             <td class="up">$${f(p.t1)}<span class="fee-subtext">T2 $${f(p.t2)}</span></td>
             <td class="down">$${f(p.sl1)}<span class="fee-subtext">SL2 $${f(p.sl2)}</span></td>
             <td>${p.rr}<span class="fee-subtext">edge ${f(p.edge, 1)}x</span></td>
-            <td>${f(p.bePct, 2)}%<span class="fee-subtext">$${f(p.be, 0)} move</span></td>
+            <td>${f(p.bePct, 2)}%<span class="fee-subtext">$${f(p.be, p.be < 10 ? 4 : 0)} move</span></td>
             <td>
                 <button class="primary" onclick="addPaperTrade(${idx})">Paper Trade</button>
                 <button onclick="openBinanceOptionChart('${p.contract}')" title="Open Binance Option Chart">📈</button>
@@ -936,7 +962,7 @@ function renderAutoPicks() {
 }
 
 function showWhy(idx) {
-    const p = AppState.autopicks[idx], o = p.opt, sg = p.side === 'CALL' ? 1 : -1, f = (v, d = 2) => v.toFixed(d);
+    const p = AppState.autopicks[idx], o = p.opt, sg = p.side === 'CALL' ? 1 : -1, f = (v, d = 2) => (d === 2 && Math.abs(v) > 0 && Math.abs(v) < 0.1) ? v.toPrecision(2) : v.toFixed(d);
     const h = t => `<div style="margin:12px 0 4px;"><strong>${t}</strong></div>`;
     const tb = rows => `<table style="width:100%;font-size:12px;">${rows}</table>`;
     document.getElementById('why-content').innerHTML = `
@@ -948,7 +974,7 @@ function showWhy(idx) {
         ${h('3 · Greeks & cost')}
         Delta ${f(o.delta)} · Gamma ${o.gamma.toFixed(5)} · Theta ${f(o.theta)}/day (${f(p.thPct, 1)}% of premium) · Vega ${f(o.vega)}<br>
         IV ${f(o.iv * 100, 1)}% · IV/RV ${f(p.ivrv)} · Option beta (Ω) ${f(p.omega, 1)}x · Spread ${f(o.spread, 1)}%<br>
-        Break-even underlying move ${f(p.bePct, 2)}% ($${f(p.be, 0)}) includes spread, est. entry+exit fees and ${fmtH(CFG.holdH)} of theta.
+        Break-even underlying move ${f(p.bePct, 2)}% ($${f(p.be, p.be < 10 ? 4 : 0)}) includes spread, est. entry+exit fees and ${fmtH(CFG.holdH)} of theta.
         ${h('4 · Trade plan')}
         Entry $${f(p.entry)} → T1 $${f(p.t1)} → T2 $${f(p.t2)} · SL1 $${f(p.sl1)} · SL2 $${f(p.sl2)} · R/R ${p.rr}:1<br>
         <span class="fee-subtext">Premium targets use delta + gamma + theta over a ${fmtH(CFG.holdH)} hold at ATR-based underlying moves, capped by nearest support/resistance. Vega/IV change is not modelled, and longer horizons stretch the delta-gamma approximation, so treat targets and stops as estimates.</span>`;
@@ -983,7 +1009,7 @@ function renderOptionChain() {
         let p = puts[strike];
         if(!c && !p) return;
         
-        let isAtm = Math.abs(strike - currentPrice) < (asset === 'BTC' ? 800 : 80);
+        let isAtm = Math.abs(strike - currentPrice) < currentPrice * 0.01;
 
         let tr = document.createElement('tr');
         if(isAtm) tr.style.background = 'rgba(240, 185, 11, 0.12)';
@@ -1247,6 +1273,7 @@ function renderTradeHistory() {
 async function initApp() {
     await fetchSpotData();
     connectOptionsWebSocket();
+    connectAltWebSocket();
 
     setInterval(() => {
         evaluateSetups();
@@ -1257,7 +1284,17 @@ async function initApp() {
     setInterval(fetchSpotData, 15000);
 }
 
-['btc', 'eth'].forEach(id => document.getElementById(`${id}-score`).closest('.card').insertAdjacentHTML('beforeend',
+const cardHTML = a => { const id = a.toLowerCase(); return `<div class="card" id="card-${id}"><div class="card-header">${NAMES[a]} (${a}) <span id="${id}-trend" class="badge">--</span></div><div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><div><div style="font-size: 24px; font-weight: bold;" id="${id}-price">$--</div><div id="${id}-change" class="up">--%</div></div><div style="text-align: right; font-size: 12px; color: var(--text-muted);"><div>RSI (14): <span id="${id}-rsi" style="color:var(--text-main);">--</span></div><div>Setup Score: <span id="${id}-score" style="color:var(--text-main); font-weight:bold;">--/100</span></div></div></div></div>`; };
+ALT.forEach(a => document.getElementById('btc-score').closest('.grid-2').insertAdjacentHTML('beforeend', cardHTML(a)));
+document.getElementById('set-alts').innerHTML = ALT.map(a => `<label style="display:inline-flex;gap:4px;align-items:center;"><input type="checkbox" value="${a}" style="width:auto;margin:0;"> ${a}</label>`).join('');
+function syncAssets() {
+    const on = ACTIVE();
+    ALT.forEach(a => { const c = document.getElementById('card-' + a.toLowerCase()); if (c) c.style.display = on.includes(a) ? '' : 'none'; });
+    document.querySelectorAll('#set-alts input').forEach(i => i.checked = on.includes(i.value));
+}
+function applyAssets() { syncAssets(); connectAltWebSocket(); fetchSpotData(); }
+syncAssets();
+ALL.map(a => a.toLowerCase()).forEach(id => document.getElementById(`${id}-score`).closest('.card').insertAdjacentHTML('beforeend',
     `<div id="${id}-detail" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;line-height:1.7;color:var(--text-muted);">Loading multi-timeframe analysis…</div>`));
 initApp();
 </script>
